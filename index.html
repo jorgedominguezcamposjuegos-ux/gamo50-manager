@@ -1,0 +1,1050 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gamo 50 Manager - Firebase</title>
+  
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.23.6/babel.min.js"></script>
+  <script src="https://unpkg.com/@mui/material@5.15.11/umd/material-ui.production.min.js"></script>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons" />
+
+  <!-- jsPDF and autoTable for PDF Generation -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+
+  <!-- Firebase SDK (Compat version para evitar problemas CORS local) -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+
+  <!-- Firebase Config -->
+  <script src="js/firebase-config.js"></script>
+
+  <!-- Validation functions -->
+  <script src="js/validation.js"></script>
+
+  <style>
+    body { margin: 0; padding: 0; font-family: 'Inter', sans-serif; background-color: #f5f7fa; }
+    .app-container { max-width: 1200px; margin: 0 auto; padding: 24px; }
+    .glass-card {
+      background: rgba(255, 255, 255, 0.9);
+      backdrop-filter: blur(10px);
+      border-radius: 12px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.05);
+      border: 1px solid rgba(255,255,255,0.2);
+    }
+    .custom-tab { font-weight: 600 !important; font-size: 1.1rem !important; text-transform: none !important; }
+    .table-header-eo { background-color: #e0f2fe; }
+    .loading-container { display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  
+  <script>
+    // Inicializar Firebase con compat SDK
+    try {
+      firebase.initializeApp(firebaseConfig);
+      const db = firebase.firestore();
+      window.firebaseDB = db;
+      window.firebaseServerTimestamp = firebase.firestore.FieldValue.serverTimestamp();
+      
+      // Hacer disponible globalmente para el script Babel
+      window.firebaseInitialized = true;
+      console.log('✅ Firebase inicializado correctamente');
+    } catch (error) {
+      console.error('❌ Error inicializando Firebase:', error);
+      window.firebaseInitialized = false;
+      window.firebaseError = error.message;
+    }
+  </script>
+
+  <script type="text/babel" data-presets="react">
+    /** @jsx React.createElement */
+    /** @jsxFrag React.Fragment */
+    const { 
+      ThemeProvider, createTheme, CssBaseline, 
+      Container, Typography, Box, Paper, Grid,
+      TextField, Button, Select, MenuItem, InputLabel, FormControl,
+      Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
+      Alert, Dialog, DialogTitle, DialogContent, DialogActions,
+      Chip, Divider, Card, CardContent, CircularProgress, IconButton,
+      Tabs, Tab, Snackbar
+    } = MaterialUI;
+
+    const theme = createTheme({
+      typography: { fontFamily: 'Inter, sans-serif' },
+      palette: {
+        primary: { main: '#1e3a8a' }, 
+        secondary: { main: '#0284c7' },
+        error: { main: '#d32f2f' },
+        background: { default: '#f8fafc' }
+      },
+      shape: { borderRadius: 8 }
+    });
+
+    function TabPanel(props) {
+      const { children, value, index, ...other } = props;
+      return (
+        <div role="tabpanel" hidden={value !== index} {...other}>
+          {value === index && <Box sx={{ pt: 3 }}>{children}</Box>}
+        </div>
+      );
+    }
+
+    function generarOpcionesMeses() {
+      const meses = [];
+      const hoy = new Date();
+      for(let i = -12; i <= 24; i++) {
+        const d = new Date(hoy.getFullYear(), hoy.getMonth() + i, 1);
+        const val = d.toISOString().slice(0, 7);
+        const label = d.toLocaleString('es-ES', { month: 'long', year: 'numeric' });
+        meses.push({ val, label: label.charAt(0).toUpperCase() + label.slice(1) });
+      }
+      return meses;
+    }
+    const OPCIONES_MESES = generarOpcionesMeses();
+
+    function App() {
+      const [tabValue, setTabValue] = React.useState(0);
+      const [data, setData] = React.useState(null);
+      const [loading, setLoading] = React.useState(true);
+      const [fechaConsultaInicio, setFechaConsultaInicio] = React.useState(new Date().toISOString().split('T')[0]);
+      const [fechaConsultaFin, setFechaConsultaFin] = React.useState(new Date().toISOString().split('T')[0]);
+      const [disponibilidad, setDisponibilidad] = React.useState(null);
+      
+      const [formData, setFormData] = React.useState({ policia_id: '', tipo: 'VA', fecha_inicio: '', fecha_fin: '' });
+      const [filtroEquipoFormulario, setFiltroEquipoFormulario] = React.useState('Todos');
+      const [filtroSODisponibles, setFiltroSODisponibles] = React.useState('Todos');
+      const [filtroSOPermisos, setFiltroSOPermisos] = React.useState('Todos');
+
+      const [snackbar, setSnackbar] = React.useState({ open: false, message: '', severity: 'success' });
+      const [confirmDialog, setConfirmDialog] = React.useState(null);
+
+      const [comisiones, setComisiones] = React.useState([]);
+      const [selectedComisionId, setSelectedComisionId] = React.useState('');
+      const [efectivosComision, setEfectivosComision] = React.useState(null);
+      const [dialogNuevaComision, setDialogNuevaComision] = React.useState(false);
+      const [newComision, setNewComision] = React.useState({ localidad: '', fecha_inicio: '', fecha_fin: '' });
+      const [newAgregado, setNewAgregado] = React.useState({ nombre: '', categoria: 'Policía', equipo: '' });
+      const [observaciones, setObservaciones] = React.useState('');
+      const [guardandoObs, setGuardandoObs] = React.useState(false);
+
+      const [consultaAgenteId, setConsultaAgenteId] = React.useState('');
+      const [consultaMes, setConsultaMes] = React.useState(new Date().toISOString().slice(0, 7));
+      const [filtroEOConsulta, setFiltroEOConsulta] = React.useState('Todos');
+      const [dialogPermisoCalendar, setDialogPermisoCalendar] = React.useState(false);
+      const [calendarFormData, setCalendarFormData] = React.useState({ id: '', policia_id: '', tipo: 'VA', fecha_inicio: '', fecha_fin: '' });
+
+      React.useEffect(() => {
+        // Esperar a que Firebase esté inicializado
+        const checkFirebase = () => {
+          if (window.firebaseInitialized === true) {
+            initializeFirebase();
+          } else if (window.firebaseInitialized === false) {
+            setSnackbar({ open: true, message: 'Error: ' + (window.firebaseError || 'Firebase no se inicializó'), severity: 'error' });
+            setLoading(false);
+          } else {
+            // Firebase aún no está listo, reintentar en 100ms
+            setTimeout(checkFirebase, 100);
+          }
+        };
+        checkFirebase();
+      }, []);
+
+      const initializeFirebase = async () => {
+        try {
+          if (!window.firebaseInitialized) {
+            setSnackbar({ open: true, message: 'Error: Firebase no se inicializó correctamente.', severity: 'error' });
+            setLoading(false);
+            return;
+          }
+          
+          await fetchData();
+        } catch (error) {
+          console.error('Error inicializando Firebase:', error);
+          setSnackbar({ open: true, message: 'Error conectando a Firebase: ' + error.message, severity: 'error' });
+          setLoading(false);
+        }
+      };
+
+      const fetchData = async () => {
+        try {
+          console.log('📥 Iniciando carga de datos...');
+          const db = window.firebaseDB;
+          console.log('🔥 DB:', db);
+          
+          // Fetch efectivos
+          console.log('📦 Cargando efectivos...');
+          const efectivosSnapshot = await db.collection('efectivos').get();
+          console.log('✅ Efectivos snapshot:', efectivosSnapshot.size, 'documentos');
+          const efectivos = efectivosSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+          
+          // Fetch permisos
+          console.log('📦 Cargando permisos...');
+          const permisosSnapshot = await db.collection('permisos').get();
+          console.log('✅ Permisos snapshot:', permisosSnapshot.size, 'documentos');
+          const permisos = permisosSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+          
+          // Fetch comisiones
+          console.log('📦 Cargando comisiones...');
+          const comisionesSnapshot = await db.collection('comisiones').get();
+          console.log('✅ Comisiones snapshot:', comisionesSnapshot.size, 'documentos');
+          const comisionesData = comisionesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+          
+          console.log('✅ Datos cargados:', { efectivos: efectivos.length, permisos: permisos.length, comisiones: comisionesData.length });
+          setData({ efectivos, permisos, comisiones_servicio: comisionesData });
+          setComisiones(comisionesData);
+          setLoading(false);
+        } catch (error) {
+          console.error('❌ Error cargando datos:', error);
+          setSnackbar({ open: true, message: 'Error cargando datos: ' + error.message, severity: 'error' });
+          setLoading(false);
+        }
+      };
+
+      const consultarDisponibilidad = () => {
+        if (fechaConsultaInicio > fechaConsultaFin) {
+          setSnackbar({ open: true, message: 'La fecha de inicio no puede ser posterior a la de fin.', severity: 'error' });
+          return;
+        }
+        try {
+          const resultado = getDisponibilidad(data, fechaConsultaInicio, fechaConsultaFin);
+          setDisponibilidad(resultado);
+        } catch (error) {
+          console.error('Error calculando disponibilidad:', error);
+          setSnackbar({ open: true, message: 'Error calculando disponibilidad', severity: 'error' });
+        }
+      };
+
+      const handleFormSubmit = async (e, force = false) => {
+        if (e) e.preventDefault();
+        try {
+          const warningResponse = checkPermisoQuotas(data, { ...formData, force });
+          
+          if (warningResponse && !force) {
+            setConfirmDialog({
+              title: "Aviso de Reglas",
+              text: warningResponse.message,
+              onConfirm: () => { setConfirmDialog(null); handleFormSubmit(null, true); }
+            });
+            return;
+          }
+          
+          const db = window.firebaseDB;
+          const nuevoPermiso = {
+            policia_id: formData.policia_id,
+            tipo: formData.tipo,
+            fecha_inicio: formData.fecha_inicio,
+            fecha_fin: formData.fecha_fin,
+            createdAt: window.firebaseServerTimestamp()
+          };
+          
+          await db.collection('permisos').add(nuevoPermiso);
+          
+          setSnackbar({ open: true, message: 'Permiso grabado', severity: 'success' });
+          setFormData({ policia_id: '', tipo: 'VA', fecha_inicio: '', fecha_fin: '' });
+          fetchData();
+          if (disponibilidad) consultarDisponibilidad();
+        } catch (error) {
+          console.error('Error guardando permiso:', error);
+          setSnackbar({ open: true, message: 'Error guardando permiso: ' + error.message, severity: 'error' });
+        }
+      };
+
+      const handleDeletePermiso = async (id) => {
+        if (!window.confirm("¿Seguro que deseas eliminar este permiso?")) return;
+        try {
+          const db = window.firebaseDB;
+          await db.collection('permisos').doc(id).delete();
+          setSnackbar({ open: true, message: 'Permiso eliminado', severity: 'success' });
+          fetchData();
+          if (disponibilidad) consultarDisponibilidad();
+        } catch (error) {
+          console.error('Error eliminando permiso:', error);
+          setSnackbar({ open: true, message: 'Error eliminando permiso', severity: 'error' });
+        }
+      };
+
+      const handleDayClick = (dayStr, currentPermiso) => {
+        if (currentPermiso && currentPermiso.tipo === 'CS') return;
+        if (currentPermiso) {
+          setCalendarFormData({ ...currentPermiso });
+        } else {
+          setCalendarFormData({ id: '', policia_id: consultaAgenteId, tipo: 'VA', fecha_inicio: dayStr, fecha_fin: dayStr });
+        }
+        setDialogPermisoCalendar(true);
+      };
+
+      const handleCalendarSubmit = async (e, force = false) => {
+        if (e) e.preventDefault();
+        try {
+          const warningResponse = checkPermisoQuotas(data, { ...calendarFormData, force });
+          
+          if (warningResponse && !force) {
+            setConfirmDialog({
+              title: "Aviso de Reglas",
+              text: warningResponse.message,
+              onConfirm: () => { setConfirmDialog(null); handleCalendarSubmit(null, true); }
+            });
+            return;
+          }
+          
+          const db = window.firebaseDB;
+          const permisoData = {
+            policia_id: calendarFormData.policia_id,
+            tipo: calendarFormData.tipo,
+            fecha_inicio: calendarFormData.fecha_inicio,
+            fecha_fin: calendarFormData.fecha_fin,
+            updatedAt: window.firebaseServerTimestamp()
+          };
+          
+          if (calendarFormData.id) {
+            await db.collection('permisos').doc(calendarFormData.id).update(permisoData);
+          } else {
+            permisoData.createdAt = window.firebaseServerTimestamp();
+            await db.collection('permisos').add(permisoData);
+          }
+          
+          setSnackbar({ open: true, message: 'Permiso guardado', severity: 'success' });
+          setDialogPermisoCalendar(false);
+          fetchData();
+        } catch (error) {
+          console.error('Error guardando permiso:', error);
+          setSnackbar({ open: true, message: 'Error guardando permiso', severity: 'error' });
+        }
+      };
+
+      const handleDeletePermisoCalendar = async () => {
+        if (!window.confirm("¿Seguro que deseas eliminar este permiso?")) return;
+        try {
+          const db = window.firebaseDB;
+          await db.collection('permisos').doc(calendarFormData.id).delete();
+          setSnackbar({ open: true, message: 'Permiso eliminado', severity: 'success' });
+          setDialogPermisoCalendar(false);
+          fetchData();
+        } catch (error) {
+          console.error('Error eliminando permiso:', error);
+          setSnackbar({ open: true, message: 'Error eliminando permiso', severity: 'error' });
+        }
+      };
+
+      const fetchEfectivosComision = async (id) => {
+        if (!id) return;
+        try {
+          const db = window.firebaseDB;
+          const comisionDoc = await db.collection('comisiones').doc(id).get();
+          if (comisionDoc.exists) {
+            const comisionData = { id: comisionDoc.id, ...comisionDoc.data() };
+            const resultado = getComisionEfectivos(data, comisionData);
+            setEfectivosComision(resultado);
+            setObservaciones(comisionData.observaciones || '');
+          }
+        } catch (error) {
+          console.error('Error cargando efectivos de comisión:', error);
+        }
+      };
+
+      React.useEffect(() => {
+        if (selectedComisionId) {
+          fetchEfectivosComision(selectedComisionId);
+          const comObj = comisiones.find(c => c.id === selectedComisionId);
+          if (comObj) setObservaciones(comObj.observaciones || '');
+        }
+      }, [selectedComisionId, comisiones]);
+
+      const handleCrearComision = async (e) => {
+        e.preventDefault();
+        try {
+          const db = window.firebaseDB;
+          const nuevaComision = {
+            localidad: newComision.localidad,
+            fecha_inicio: newComision.fecha_inicio,
+            fecha_fin: newComision.fecha_fin,
+            agregados: [],
+            excluidos_manuales: [],
+            observaciones: '',
+            createdAt: window.firebaseServerTimestamp()
+          };
+          
+          const docRef = await db.collection('comisiones').add(nuevaComision);
+          
+          setDialogNuevaComision(false);
+          setSnackbar({ open: true, message: 'Comisión creada', severity: 'success' });
+          fetchData();
+          setSelectedComisionId(docRef.id);
+          setNewComision({ localidad: '', fecha_inicio: '', fecha_fin: '' });
+        } catch (error) {
+          console.error('Error creando comisión:', error);
+          setSnackbar({ open: true, message: 'Error creando comisión', severity: 'error' });
+        }
+      };
+
+      const handleAddAgregado = async (e) => {
+        e.preventDefault();
+        try {
+          const db = window.firebaseDB;
+          const comisionRef = db.collection('comisiones').doc(selectedComisionId);
+          
+          const nuevoAgregado = {
+            id: generateUUID(),
+            nombre: newAgregado.nombre,
+            categoria: newAgregado.categoria,
+            equipo: newAgregado.equipo,
+            so: 'AGREGADO'
+          };
+          
+          await comisionRef.update({
+            agregados: firebase.firestore.FieldValue.arrayUnion(nuevoAgregado)
+          });
+          
+          setNewAgregado({ nombre: '', categoria: 'Policía', equipo: '' });
+          fetchEfectivosComision(selectedComisionId);
+          fetchData();
+          setSnackbar({ open: true, message: 'Agregado añadido', severity: 'success' });
+        } catch (error) {
+          console.error('Error añadiendo agregado:', error);
+          setSnackbar({ open: true, message: 'Error añadiendo agregado', severity: 'error' });
+        }
+      };
+
+      const handleDeleteComponenteComision = async (componente) => {
+        if (!window.confirm(`¿Excluir a ${componente.nombre} de la comisión?`)) return;
+        try {
+          const db = window.firebaseDB;
+          const comisionRef = db.collection('comisiones').doc(selectedComisionId);
+          
+          if (componente.esAgregado) {
+            await comisionRef.update({
+              agregados: firebase.firestore.FieldValue.arrayRemove(componente)
+            });
+          } else {
+            await comisionRef.update({
+              excluidos_manuales: firebase.firestore.FieldValue.arrayUnion(componente.id)
+            });
+          }
+          
+          fetchEfectivosComision(selectedComisionId);
+          fetchData();
+          setSnackbar({ open: true, message: 'Componente eliminado de la comisión', severity: 'success' });
+        } catch (error) {
+          console.error('Error eliminando componente:', error);
+          setSnackbar({ open: true, message: 'Error eliminando componente', severity: 'error' });
+        }
+      };
+
+      const handleGuardarObservaciones = async () => {
+        setGuardandoObs(true);
+        try {
+          const db = window.firebaseDB;
+          await db.collection('comisiones').doc(selectedComisionId).update({
+            observaciones: observaciones
+          });
+          setSnackbar({ open: true, message: 'Observaciones guardadas', severity: 'success' });
+          fetchData();
+        } catch (error) {
+          console.error('Error guardando observaciones:', error);
+          setSnackbar({ open: true, message: 'Error guardando observaciones', severity: 'error' });
+        } finally {
+          setGuardandoObs(false);
+        }
+      };
+
+      if (loading) {
+        return (
+          <ThemeProvider theme={theme}>
+            <CssBaseline />
+            <div className="loading-container">
+              <Box textAlign="center">
+                <CircularProgress size={60} />
+                <Typography variant="h6" sx={{ mt: 3 }}>Cargando datos de Firebase...</Typography>
+              </Box>
+            </div>
+          </ThemeProvider>
+        );
+      }
+
+      if (!data) {
+        return (
+          <ThemeProvider theme={theme}>
+            <CssBaseline />
+            <Container className="app-container" maxWidth="xl">
+              <Alert severity="error">
+                Error cargando datos. Verifica la configuración de Firebase en js/firebase-config.js
+              </Alert>
+            </Container>
+          </ThemeProvider>
+        );
+      }
+
+      const equiposDisponibles = ['Todos', ...new Set(data.efectivos.map(p => p.equipo))].sort();
+      const subgruposDisponibles = ['Todos', ...new Set(data.efectivos.map(p => p.so))].sort();
+      const efectivosFiltradosForm = data.efectivos.filter(p => filtroEquipoFormulario === 'Todos' || p.equipo === filtroEquipoFormulario);
+      const disponiblesFiltrados = disponibilidad?.disponibles.filter(p => filtroSODisponibles === 'Todos' || p.so === filtroSODisponibles) || [];
+      const targetIni = new Date(fechaConsultaInicio);
+      const targetFin = new Date(fechaConsultaFin);
+      const permisosFiltrados = data.permisos.filter(p => {
+        const agente = data.efectivos.find(e => e.id === p.policia_id) || {};
+        const matchSO = filtroSOPermisos === 'Todos' || agente.so === filtroSOPermisos;
+        const pIni = new Date(p.fecha_inicio);
+        const pFin = new Date(p.fecha_fin);
+        const matchFecha = Math.max(targetIni, pIni) <= Math.min(targetFin, pFin);
+        return matchSO && matchFecha;
+      });
+
+      const selectedComObj = comisiones.find(c => c.id === selectedComisionId);
+      const efectivosFiltradosConsulta = data.efectivos.filter(p => filtroEOConsulta === 'Todos' || p.equipo === filtroEOConsulta);
+
+      let agrupadosPorEO = {};
+      let totalSO = {};
+      let totalGO = 0;
+      
+      if (efectivosComision) {
+        const todos = [
+          ...efectivosComision.elegibles.map(e => ({...e, esAgregado: false})),
+          ...efectivosComision.agregados.map(a => ({...a, esAgregado: true, so: a.so || 'AGREGADO'}))
+        ];
+        totalGO = todos.length;
+        todos.forEach(p => {
+          const eq = p.equipo || 'Sin Equipo';
+          if (!agrupadosPorEO[eq]) agrupadosPorEO[eq] = [];
+          agrupadosPorEO[eq].push(p);
+
+          let calcSO = p.so;
+          if (p.esAgregado) {
+             const realAgent = data.efectivos.find(e => e.equipo === eq);
+             if (realAgent) calcSO = realAgent.so;
+          }
+          if (calcSO && calcSO !== 'AGREGADO') {
+            totalSO[calcSO] = (totalSO[calcSO] || 0) + 1;
+          }
+        });
+      }
+
+      const generarCuadrantePDF = () => {
+        if (!selectedComObj) return;
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+        
+        doc.setFontSize(16);
+        doc.text(`Distribución Gamo 50 Comisión ${selectedComObj.localidad}`, 14, 20);
+        
+        doc.setFontSize(10);
+        doc.text(`Periodo: ${selectedComObj.fecha_inicio} al ${selectedComObj.fecha_fin}`, 14, 28);
+        doc.text(`Total Efectivos: ${totalGO}`, 14, 34);
+
+        let currentY = 42;
+
+        Object.keys(agrupadosPorEO).sort().forEach(eq => {
+          const nombreEq = eq.includes('Gamo') || eq.includes('EM') ? eq : `Equipo ${eq}`;
+          
+          doc.setFontSize(12);
+          doc.setFont('helvetica', 'bold');
+          doc.text(`${nombreEq} (${agrupadosPorEO[eq].length} componentes)`, 14, currentY);
+          
+          const head = [['Nombre', 'Categoría', 'Origen']];
+          const body = agrupadosPorEO[eq].map(p => [
+            p.nombre + (p.esAgregado ? ' (Agregado)' : ''),
+            p.categoria,
+            p.esAgregado ? 'Externo' : `SO ${p.so}`
+          ]);
+
+          doc.autoTable({
+            startY: currentY + 4,
+            head: head,
+            body: body,
+            theme: 'grid',
+            headStyles: { fillColor: [30, 58, 138] },
+            margin: { left: 14, right: 14 }
+          });
+
+          currentY = doc.lastAutoTable.finalY + 12;
+        });
+
+        if (observaciones) {
+          doc.setFontSize(12);
+          doc.setFont('helvetica', 'bold');
+          doc.text("Observaciones:", 14, currentY);
+          doc.setFontSize(10);
+          doc.setFont('helvetica', 'normal');
+          const splitObs = doc.splitTextToSize(observaciones, 180);
+          doc.text(splitObs, 14, currentY + 6);
+        }
+
+        doc.save(`Distribucion_Comision_${selectedComObj.localidad.replace(/\s+/g, '_')}.pdf`);
+      };
+
+      const renderCalendar = () => {
+        if (!consultaAgenteId || !consultaMes) return null;
+        
+        const [y, m] = consultaMes.split('-');
+        const year = parseInt(y, 10);
+        const month = parseInt(m, 10) - 1;
+        const firstDay = new Date(year, month, 1);
+        const lastDay = new Date(year, month + 1, 0);
+        
+        let startDayOfWeek = firstDay.getDay() - 1;
+        if (startDayOfWeek === -1) startDayOfWeek = 6;
+        
+        const days = [];
+        for (let i = 0; i < startDayOfWeek; i++) days.push(null);
+        
+        for (let d = 1; d <= lastDay.getDate(); d++) {
+          const dStr = new Date(year, month, d, 12).toISOString().split('T')[0];
+          days.push(dStr);
+        }
+
+        const getDayStatus = (dStr) => {
+          const p = data.permisos.find(p => p.policia_id === consultaAgenteId && dStr >= p.fecha_inicio && dStr <= p.fecha_fin);
+          if (p) return p;
+          const c = comisiones.find(c => dStr >= c.fecha_inicio && dStr <= c.fecha_fin && !c.excluidos_manuales?.includes(consultaAgenteId));
+          if (c) return { tipo: 'CS', localidad: c.localidad };
+          return null;
+        };
+
+        const getBgColor = (tipo) => {
+          switch(tipo) {
+            case 'AP': return '#3b82f6';
+            case 'PT': return '#22c55e';
+            case 'AFG': return '#a855f7';
+            case 'CS': return '#eab308';
+            case 'VA': return '#f97316';
+            default: return '#ef4444';
+          }
+        };
+
+        return (
+          <Box>
+            <Grid container spacing={1}>
+              {['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'].map(d => (
+                <Grid item xs={12/7} key={d}>
+                  <Box textAlign="center" fontWeight="bold" py={1}>{d}</Box>
+                </Grid>
+              ))}
+              {days.map((dStr, i) => {
+                if (!dStr) return <Grid item xs={12/7} key={`empty-${i}`}><Box height={80} /></Grid>;
+                const st = getDayStatus(dStr);
+                const dayNum = parseInt(dStr.split('-')[2], 10);
+                return (
+                  <Grid item xs={12/7} key={dStr}>
+                    <Box 
+                      onClick={() => handleDayClick(dStr, st)}
+                      sx={{
+                        height: 80, 
+                        border: '1px solid #e2e8f0', 
+                        borderRadius: 1, 
+                        p: 1,
+                        cursor: st?.tipo === 'CS' ? 'default' : 'pointer',
+                        backgroundColor: st ? getBgColor(st.tipo) : '#fff',
+                        color: st ? '#fff' : 'inherit',
+                        '&:hover': { opacity: st?.tipo === 'CS' ? 1 : 0.8 }
+                      }}
+                    >
+                      <Typography variant="body2" fontWeight="bold">{dayNum}</Typography>
+                      {st && <Typography variant="caption" sx={{ display: 'block', mt: 1, lineHeight: 1.1 }}>{st.tipo === 'CS' ? `CS ${st.localidad}` : st.tipo}</Typography>}
+                    </Box>
+                  </Grid>
+                );
+              })}
+            </Grid>
+          </Box>
+        );
+      };
+
+      return (
+        <ThemeProvider theme={theme}>
+          <CssBaseline />
+          <Container className="app-container" maxWidth="xl">
+            <Box mb={3} display="flex" alignItems="center" justifyContent="space-between">
+              <Typography variant="h4" fontWeight="700" color="primary">Gamo 50 Manager - Firebase</Typography>
+            </Box>
+
+            <Snackbar 
+              open={snackbar.open} 
+              autoHideDuration={6000} 
+              onClose={() => setSnackbar({ ...snackbar, open: false })}
+            >
+              <Alert severity={snackbar.severity} onClose={() => setSnackbar({ ...snackbar, open: false })}>
+                {snackbar.message}
+              </Alert>
+            </Snackbar>
+
+            <Paper className="glass-card" sx={{ mb: 3 }}>
+              <Tabs value={tabValue} onChange={(e, newValue) => setTabValue(newValue)} centered variant="fullWidth">
+                <Tab label="Gestión en Base" className="custom-tab" />
+                <Tab label="Gestión en Comisión de Servicio" className="custom-tab" />
+                <Tab label="Consulta Individual" className="custom-tab" />
+              </Tabs>
+            </Paper>
+
+            {/* TAB 0: GESTION EN BASE */}
+            <TabPanel value={tabValue} index={0}>
+              <Grid container spacing={4}>
+                <Grid item xs={12} md={4}>
+                  <Paper className="glass-card" sx={{ p: 3 }}>
+                    <Typography variant="h6" mb={2} fontWeight="600">Grabar Permiso</Typography>
+                    <form onSubmit={handleFormSubmit}>
+                      <FormControl fullWidth margin="normal" size="small">
+                        <InputLabel>Filtrar por Equipo Operativo</InputLabel>
+                        <Select value={filtroEquipoFormulario} label="Filtrar por Equipo Operativo" onChange={(e) => { setFiltroEquipoFormulario(e.target.value); setFormData({...formData, policia_id: ''}); }}>
+                          {equiposDisponibles.map(eq => <MenuItem key={eq} value={eq}>{eq}</MenuItem>)}
+                        </Select>
+                      </FormControl>
+                      <FormControl fullWidth margin="normal">
+                        <InputLabel>Agente</InputLabel>
+                        <Select value={formData.policia_id} label="Agente" onChange={(e) => setFormData({...formData, policia_id: e.target.value})} required>
+                          {efectivosFiltradosForm.map(p => <MenuItem key={p.id} value={p.id}>{p.nombre} (SO {p.so} - Eq {p.equipo})</MenuItem>)}
+                        </Select>
+                      </FormControl>
+                      <FormControl fullWidth margin="normal">
+                        <InputLabel>Tipo de Permiso</InputLabel>
+                        <Select value={formData.tipo} label="Tipo de Permiso" onChange={(e) => setFormData({...formData, tipo: e.target.value})} required>
+                          <MenuItem value="AP">AP</MenuItem><MenuItem value="VA">VA</MenuItem><MenuItem value="AFG">AFG</MenuItem><MenuItem value="CH">CH</MenuItem><MenuItem value="CU">CU</MenuItem><MenuItem value="BJ">BJ</MenuItem><MenuItem value="PT">PT</MenuItem>
+                        </Select>
+                      </FormControl>
+                      <TextField fullWidth margin="normal" label="Fecha Inicio" type="date" InputLabelProps={{ shrink: true }} value={formData.fecha_inicio} onChange={(e) => setFormData({...formData, fecha_inicio: e.target.value})} required />
+                      <TextField fullWidth margin="normal" label="Fecha Fin" type="date" InputLabelProps={{ shrink: true }} value={formData.fecha_fin} onChange={(e) => setFormData({...formData, fecha_fin: e.target.value})} required />
+                      <Button type="submit" variant="contained" fullWidth sx={{ mt: 3, py: 1.5 }} disableElevation>Registrar Permiso</Button>
+                    </form>
+                  </Paper>
+                </Grid>
+
+                <Grid item xs={12} md={8}>
+                  <Paper className="glass-card" sx={{ p: 3, minHeight: '400px' }}>
+                    <Box display="flex" justifyContent="space-between" alignItems="center" mb={3} gap={2} flexWrap="wrap">
+                      <Typography variant="h6" fontWeight="600">Disponibilidad de Efectivos en Base</Typography>
+                      <Box display="flex" gap={1}>
+                        <TextField label="Desde" type="date" InputLabelProps={{ shrink: true }} size="small" value={fechaConsultaInicio} onChange={(e) => setFechaConsultaInicio(e.target.value)} />
+                        <TextField label="Hasta" type="date" InputLabelProps={{ shrink: true }} size="small" value={fechaConsultaFin} onChange={(e) => setFechaConsultaFin(e.target.value)} />
+                        <Button variant="contained" onClick={consultarDisponibilidad} disableElevation>Consultar</Button>
+                      </Box>
+                    </Box>
+                    <Divider sx={{ mb: 3 }} />
+
+                    {disponibilidad ? (
+                      <Box>
+                        <Card variant="outlined" sx={{ mb: 3, backgroundColor: '#f0f9ff', borderColor: '#bae6fd' }}>
+                          <CardContent>
+                            <Typography variant="subtitle2" color="text.secondary">Reporte Oficial</Typography>
+                            <Typography variant="body1" component="pre" sx={{ whiteSpace: 'pre-wrap', fontFamily: 'monospace', mt: 1 }}>{disponibilidad.reporte}</Typography>
+                          </CardContent>
+                        </Card>
+                        <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+                          <Typography variant="subtitle1" fontWeight="600">Lista de Disponibles en Base ({disponiblesFiltrados.length})</Typography>
+                          <FormControl size="small" sx={{ minWidth: 150 }}>
+                            <InputLabel>Filtrar SO</InputLabel>
+                            <Select value={filtroSODisponibles} label="Filtrar SO" onChange={(e) => setFiltroSODisponibles(e.target.value)}>
+                              {subgruposDisponibles.map(so => <MenuItem key={so} value={so}>{so}</MenuItem>)}
+                            </Select>
+                          </FormControl>
+                        </Box>
+                        <TableContainer sx={{ maxHeight: 300 }}>
+                          <Table size="small" stickyHeader>
+                            <TableHead><TableRow><TableCell><strong>Nombre</strong></TableCell><TableCell><strong>Categoría</strong></TableCell><TableCell><strong>Gamo / Eq</strong></TableCell></TableRow></TableHead>
+                            <TableBody>
+                              {disponiblesFiltrados.map(p => (
+                                <TableRow key={p.id}>
+                                  <TableCell>{p.nombre}</TableCell>
+                                  <TableCell>{p.categoria} {p.en_funciones && <Chip label="En func." size="small" sx={{ml:1, fontSize:'0.65rem'}}/>}</TableCell>
+                                  <TableCell>SO {p.so} - Eq {p.equipo}</TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </TableContainer>
+                      </Box>
+                    ) : (
+                      <Typography color="text.secondary">Seleccione una fecha y haga clic en Consultar.</Typography>
+                    )}
+                  </Paper>
+                </Grid>
+              </Grid>
+              
+              <Box mt={4}>
+                <Paper className="glass-card" sx={{ p: 3 }}>
+                  <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+                    <Typography variant="h6" fontWeight="600">Permisos y Bajas en el periodo: {fechaConsultaInicio} al {fechaConsultaFin}</Typography>
+                    <FormControl size="small" sx={{ minWidth: 150 }}>
+                      <InputLabel>Filtrar SO</InputLabel>
+                      <Select value={filtroSOPermisos} label="Filtrar SO" onChange={(e) => setFiltroSOPermisos(e.target.value)}>
+                        {subgruposDisponibles.map(so => <MenuItem key={so} value={so}>{so}</MenuItem>)}
+                      </Select>
+                    </FormControl>
+                  </Box>
+                  <TableContainer sx={{ maxHeight: 400 }}>
+                    <Table size="small" stickyHeader>
+                      <TableHead><TableRow><TableCell><strong>Agente</strong></TableCell><TableCell><strong>SO / Eq</strong></TableCell><TableCell><strong>Tipo</strong></TableCell><TableCell><strong>Desde</strong></TableCell><TableCell><strong>Hasta</strong></TableCell><TableCell align="center"><strong>Acciones</strong></TableCell></TableRow></TableHead>
+                      <TableBody>
+                        {permisosFiltrados.map((p, i) => {
+                          const agente = data.efectivos.find(e => e.id === p.policia_id) || {};
+                          return (
+                            <TableRow key={p.id || i}>
+                              <TableCell>{agente.nombre || p.policia_id}</TableCell>
+                              <TableCell>SO {agente.so} - Eq {agente.equipo}</TableCell>
+                              <TableCell><Chip label={p.tipo} size="small" color={p.tipo==='BJ'?'error':'default'} /></TableCell>
+                              <TableCell>{p.fecha_inicio}</TableCell><TableCell>{p.fecha_fin}</TableCell>
+                              <TableCell align="center">
+                                <IconButton size="small" color="error" onClick={() => handleDeletePermiso(p.id)}>
+                                  <span className="material-icons" style={{fontSize: 20}}>delete</span>
+                                </IconButton>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                </Paper>
+              </Box>
+            </TabPanel>
+
+            {/* TAB 1: GESTION EN COMISION */}
+            <TabPanel value={tabValue} index={1}>
+              <Paper className="glass-card" sx={{ p: 3, mb: 4 }}>
+                <Box display="flex" justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={2}>
+                  <Box display="flex" alignItems="center" gap={2}>
+                    <FormControl sx={{ minWidth: 300 }}>
+                      <InputLabel>Seleccionar Comisión de Servicio</InputLabel>
+                      <Select value={selectedComisionId} label="Seleccionar Comisión de Servicio" onChange={(e) => setSelectedComisionId(e.target.value)}>
+                        <MenuItem value=""><em>-- Ninguna --</em></MenuItem>
+                        {comisiones.map(c => (
+                          <MenuItem key={c.id} value={c.id}>Comisión {c.localidad} ({c.fecha_inicio} al {c.fecha_fin})</MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                    <Button variant="outlined" color="primary" onClick={() => setDialogNuevaComision(true)}>
+                      + Añadir Nueva
+                    </Button>
+                  </Box>
+                  
+                  {selectedComObj && (
+                    <Button variant="contained" color="secondary" onClick={generarCuadrantePDF} disableElevation startIcon={<span className="material-icons">picture_as_pdf</span>}>
+                      Generar Cuadrante
+                    </Button>
+                  )}
+                </Box>
+              </Paper>
+
+              {selectedComisionId && efectivosComision && selectedComObj && (
+                <Grid container spacing={4}>
+                  <Grid item xs={12} md={4}>
+                    <Paper className="glass-card" sx={{ p: 3, mb: 3 }}>
+                      <Typography variant="h6" mb={2} fontWeight="600">Resumen Efectivos de la Comisión</Typography>
+                      <Box display="flex" justifyContent="space-between" mb={1}><Typography>Total Elegibles Gamo 50:</Typography><Typography fontWeight="600">{efectivosComision.elegibles.length}</Typography></Box>
+                      <Box display="flex" justifyContent="space-between" mb={1}><Typography>Total Agregados Temporales:</Typography><Typography fontWeight="600">{efectivosComision.agregados.length}</Typography></Box>
+                      <Divider sx={{ my: 1 }} />
+                      
+                      <Typography variant="subtitle2" mt={2} mb={1} color="text.secondary">Desglose por SO:</Typography>
+                      {Object.keys(totalSO).sort().map(so => (
+                        <Box display="flex" justifyContent="space-between" key={so}>
+                          <Typography variant="body2">Subgrupo {so}:</Typography>
+                          <Typography variant="body2" fontWeight="600">{totalSO[so]}</Typography>
+                        </Box>
+                      ))}
+
+                      <Divider sx={{ my: 2 }} />
+                      <Box display="flex" justifyContent="space-between">
+                        <Typography variant="h6">TOTAL GO COMISIÓN:</Typography>
+                        <Typography variant="h6" color="primary">{totalGO}</Typography>
+                      </Box>
+                    </Paper>
+
+                    <Paper className="glass-card" sx={{ p: 3, mb: 3 }}>
+                      <Typography variant="h6" mb={2} fontWeight="600">Añadir Agregado Externo</Typography>
+                      <form onSubmit={handleAddAgregado}>
+                        <TextField fullWidth margin="normal" label="Nombre y Apellidos" value={newAgregado.nombre} onChange={(e)=>setNewAgregado({...newAgregado, nombre: e.target.value})} required size="small"/>
+                        <FormControl fullWidth margin="normal" size="small">
+                          <InputLabel>Categoría</InputLabel>
+                          <Select value={newAgregado.categoria} label="Categoría" onChange={(e)=>setNewAgregado({...newAgregado, categoria: e.target.value})} required>
+                            <MenuItem value="Inspector">Inspector</MenuItem><MenuItem value="Subinspector">Subinspector</MenuItem><MenuItem value="Oficial">Oficial</MenuItem><MenuItem value="Policía">Policía</MenuItem>
+                          </Select>
+                        </FormControl>
+                        <TextField fullWidth margin="normal" label="Destino (Ej: Gamo 56)" value={newAgregado.equipo} onChange={(e)=>setNewAgregado({...newAgregado, equipo: e.target.value})} required size="small"/>
+                        <Button type="submit" variant="outlined" fullWidth sx={{ mt: 2 }} disableElevation>Añadir a la Comisión</Button>
+                      </form>
+                    </Paper>
+
+                    <Paper className="glass-card" sx={{ p: 3 }}>
+                      <Typography variant="h6" mb={2} fontWeight="600">Observaciones</Typography>
+                      <TextField
+                        fullWidth multiline rows={4}
+                        placeholder="Anotaciones manuales de la comisión..."
+                        value={observaciones}
+                        onChange={(e) => setObservaciones(e.target.value)}
+                      />
+                      <Button 
+                        variant="contained" fullWidth sx={{ mt: 2 }} 
+                        onClick={handleGuardarObservaciones}
+                        disabled={guardandoObs}
+                      >
+                        Guardar Observaciones
+                      </Button>
+                    </Paper>
+                  </Grid>
+
+                  <Grid item xs={12} md={8}>
+                    <Paper className="glass-card" sx={{ p: 3 }}>
+                      <Typography variant="h6" mb={2} fontWeight="600">Organización por Equipos (Plantilla Total de la Comisión)</Typography>
+                      <Typography variant="body2" color="text.secondary" mb={3}>
+                        En esta vista se integran tanto los efectivos originales del Gamo 50 (que no tienen permisos solapados) como los agregados temporales, agrupados por su Equipo Operativo.
+                      </Typography>
+                      
+                      <TableContainer sx={{ maxHeight: 600 }}>
+                        <Table size="small" stickyHeader>
+                          <TableHead>
+                            <TableRow>
+                              <TableCell><strong>Nombre</strong></TableCell>
+                              <TableCell><strong>Categoría</strong></TableCell>
+                              <TableCell><strong>Origen</strong></TableCell>
+                              <TableCell align="center"><strong>Eliminar</strong></TableCell>
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            {Object.keys(agrupadosPorEO).sort().map(eq => (
+                              <React.Fragment key={eq}>
+                                <TableRow className="table-header-eo">
+                                  <TableCell colSpan={4}>
+                                    <Typography variant="subtitle2" fontWeight="600" color="primary">
+                                      {eq.includes('Gamo') || eq.includes('EM') ? eq : `Equipo ${eq}`} (Total: {agrupadosPorEO[eq].length} componentes)
+                                    </Typography>
+                                  </TableCell>
+                                </TableRow>
+                                {agrupadosPorEO[eq].map(p => (
+                                  <TableRow key={p.id}>
+                                    <TableCell>
+                                      {p.nombre} 
+                                      {p.esAgregado && <Chip label="Agregado" size="small" color="warning" sx={{ml:1, fontSize:'0.65rem'}}/>}
+                                    </TableCell>
+                                    <TableCell>{p.categoria}</TableCell>
+                                    <TableCell>{p.esAgregado ? 'Externo' : `SO ${p.so}`}</TableCell>
+                                    <TableCell align="center">
+                                      <IconButton size="small" color="error" onClick={() => handleDeleteComponenteComision(p)}>
+                                        <span className="material-icons" style={{fontSize: 20}}>delete</span>
+                                      </IconButton>
+                                    </TableCell>
+                                  </TableRow>
+                                ))}
+                              </React.Fragment>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </TableContainer>
+                    </Paper>
+                  </Grid>
+                </Grid>
+              )}
+            </TabPanel>
+
+            {/* TAB 2: CONSULTA INDIVIDUAL */}
+            <TabPanel value={tabValue} index={2}>
+              <Paper className="glass-card" sx={{ p: 3, mb: 3 }}>
+                <Typography variant="h6" mb={2} fontWeight="600">Consulta Individual por Agente</Typography>
+                <Grid container spacing={3} alignItems="center">
+                  <Grid item xs={12} md={3}>
+                    <FormControl fullWidth size="small">
+                      <InputLabel>Filtrar por EO</InputLabel>
+                      <Select value={filtroEOConsulta} label="Filtrar por EO" onChange={(e) => { setFiltroEOConsulta(e.target.value); setConsultaAgenteId(''); }}>
+                        {equiposDisponibles.map(eq => <MenuItem key={eq} value={eq}>{eq}</MenuItem>)}
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                  <Grid item xs={12} md={5}>
+                    <FormControl fullWidth size="small">
+                      <InputLabel>Agente</InputLabel>
+                      <Select value={consultaAgenteId} label="Agente" onChange={(e) => setConsultaAgenteId(e.target.value)}>
+                        <MenuItem value=""><em>Seleccione Agente</em></MenuItem>
+                        {efectivosFiltradosConsulta.map(p => <MenuItem key={p.id} value={p.id}>{p.nombre} (SO {p.so} - Eq {p.equipo})</MenuItem>)}
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                  <Grid item xs={12} md={4}>
+                    <FormControl fullWidth size="small">
+                      <InputLabel>Mes de Consulta</InputLabel>
+                      <Select value={consultaMes} label="Mes de Consulta" onChange={(e) => setConsultaMes(e.target.value)}>
+                        {OPCIONES_MESES.map(m => <MenuItem key={m.val} value={m.val}>{m.label}</MenuItem>)}
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                </Grid>
+              </Paper>
+
+              {consultaAgenteId && consultaMes && (
+                <Paper className="glass-card" sx={{ p: 3, minHeight: '500px' }}>
+                  <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+                    <Typography variant="h6" fontWeight="600">Calendario: {consultaMes}</Typography>
+                    <Box display="flex" gap={1} flexWrap="wrap">
+                      <Chip size="small" label="AP" sx={{bgcolor: '#3b82f6', color: 'white'}} />
+                      <Chip size="small" label="VA" sx={{bgcolor: '#f97316', color: 'white'}} />
+                      <Chip size="small" label="AFG" sx={{bgcolor: '#a855f7', color: 'white'}} />
+                      <Chip size="small" label="BJ/Otros" sx={{bgcolor: '#ef4444', color: 'white'}} />
+                      <Chip size="small" label="PT" sx={{bgcolor: '#22c55e', color: 'white'}} />
+                      <Chip size="small" label="Comisión" sx={{bgcolor: '#eab308', color: 'white'}} />
+                    </Box>
+                  </Box>
+                  {renderCalendar()}
+                </Paper>
+              )}
+            </TabPanel>
+
+            <Dialog open={dialogPermisoCalendar} onClose={() => setDialogPermisoCalendar(false)}>
+              <form onSubmit={handleCalendarSubmit}>
+                <DialogTitle>{calendarFormData.id ? 'Modificar Permiso' : 'Añadir Permiso en Calendario'}</DialogTitle>
+                <DialogContent>
+                  <FormControl fullWidth margin="dense" size="small" sx={{ mt: 2 }}>
+                    <InputLabel>Tipo de Permiso</InputLabel>
+                    <Select value={calendarFormData.tipo} label="Tipo de Permiso" onChange={(e) => setCalendarFormData({...calendarFormData, tipo: e.target.value})} required>
+                      <MenuItem value="AP">AP</MenuItem><MenuItem value="VA">VA</MenuItem><MenuItem value="AFG">AFG</MenuItem><MenuItem value="CH">CH</MenuItem><MenuItem value="CU">CU</MenuItem><MenuItem value="BJ">BJ</MenuItem><MenuItem value="PT">PT</MenuItem>
+                    </Select>
+                  </FormControl>
+                  <TextField fullWidth margin="dense" label="Fecha Inicio" type="date" InputLabelProps={{ shrink: true }} value={calendarFormData.fecha_inicio} onChange={(e) => setCalendarFormData({...calendarFormData, fecha_inicio: e.target.value})} required sx={{ mt: 2 }}/>
+                  <TextField fullWidth margin="dense" label="Fecha Fin" type="date" InputLabelProps={{ shrink: true }} value={calendarFormData.fecha_fin} onChange={(e) => setCalendarFormData({...calendarFormData, fecha_fin: e.target.value})} required sx={{ mt: 2 }}/>
+                </DialogContent>
+                <DialogActions>
+                  {calendarFormData.id && <Button color="error" onClick={handleDeletePermisoCalendar}>Eliminar</Button>}
+                  <Box flexGrow={1} />
+                  <Button onClick={() => setDialogPermisoCalendar(false)}>Cancelar</Button>
+                  <Button type="submit" variant="contained" color="primary">Guardar</Button>
+                </DialogActions>
+              </form>
+            </Dialog>
+
+            <Dialog open={!!confirmDialog} onClose={() => setConfirmDialog(null)}>
+              <DialogTitle>{confirmDialog?.title}</DialogTitle>
+              <DialogContent><Typography>{confirmDialog?.text}</Typography></DialogContent>
+              <DialogActions>
+                <Button onClick={() => setConfirmDialog(null)}>Cancelar</Button>
+                <Button onClick={confirmDialog?.onConfirm} variant="contained" color="primary">Confirmar</Button>
+              </DialogActions>
+            </Dialog>
+
+            <Dialog open={dialogNuevaComision} onClose={() => setDialogNuevaComision(false)}>
+              <form onSubmit={handleCrearComision}>
+                <DialogTitle>Nueva Comisión de Servicio</DialogTitle>
+                <DialogContent>
+                  <TextField fullWidth margin="dense" label="Localidad (Ej: Melilla)" value={newComision.localidad} onChange={(e) => setNewComision({...newComision, localidad: e.target.value})} required />
+                  <TextField fullWidth margin="dense" label="Fecha Inicio" type="date" InputLabelProps={{ shrink: true }} value={newComision.fecha_inicio} onChange={(e) => setNewComision({...newComision, fecha_inicio: e.target.value})} required sx={{ mt: 2 }}/>
+                  <TextField fullWidth margin="dense" label="Fecha Fin" type="date" InputLabelProps={{ shrink: true }} value={newComision.fecha_fin} onChange={(e) => setNewComision({...newComision, fecha_fin: e.target.value})} required sx={{ mt: 2 }}/>
+                </DialogContent>
+                <DialogActions>
+                  <Button onClick={() => setDialogNuevaComision(false)}>Cancelar</Button>
+                  <Button type="submit" variant="contained" color="primary">Crear Comisión</Button>
+                </DialogActions>
+              </form>
+            </Dialog>
+            
+          </Container>
+        </ThemeProvider>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>

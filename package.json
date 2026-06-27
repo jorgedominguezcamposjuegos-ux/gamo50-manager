@@ -1,0 +1,22 @@
+{
+  "name": "gamo50-firebase-webapp",
+  "version": "1.0.0",
+  "description": "Web App estática para Gamo 50 Manager con Firebase Firestore",
+  "main": "migrate-to-firebase.js",
+  "scripts": {
+    "migrate": "node migrate-to-firebase.js"
+  },
+  "keywords": [
+    "gamo50",
+    "firebase",
+    "firestore",
+    "permisos",
+    "comisiones"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "firebase": "^10.7.1",
+    "firebase-tools": "^15.22.3"
+  }
+}
