@@ -142,6 +142,155 @@
       const [dialogPermisoCalendar, setDialogPermisoCalendar] = React.useState(false);
       const [calendarFormData, setCalendarFormData] = React.useState({ id: '', policia_id: '', tipo: 'VA', fecha_inicio: '', fecha_fin: '' });
 
+      // Estado para Resumen Bloque
+      const [selectedBloque, setSelectedBloque] = React.useState(325);
+      const [anotacionesBloque, setAnotacionesBloque] = React.useState({});
+
+      // Generar bloques de 28 días
+      const generarBloques = () => {
+        const bloques = [];
+        const bloqueInicio = 325;
+        const fechaInicioBloque325 = new Date(2026, 5, 29); // 29 de junio de 2026 (mes 5 = junio en JS)
+        
+        for (let i = 0; i < 24; i++) {
+          const numBloque = bloqueInicio + i;
+          const diasDesdeInicio = i * 28;
+          const fechaInicio = new Date(fechaInicioBloque325);
+          fechaInicio.setDate(fechaInicio.getDate() + diasDesdeInicio);
+          
+          const fechaFin = new Date(fechaInicio);
+          fechaFin.setDate(fechaFin.getDate() + 27);
+          
+          bloques.push({
+            numero: numBloque,
+            inicio: fechaInicio.toISOString().split('T')[0],
+            fin: fechaFin.toISOString().split('T')[0],
+            label: `Bloque ${numBloque} (${fechaInicio.toLocaleDateString('es-ES')} - ${fechaFin.toLocaleDateString('es-ES')})`
+          });
+        }
+        return bloques;
+      };
+
+      const bloques = generarBloques();
+      const bloqueSeleccionado = bloques.find(b => b.numero === selectedBloque) || bloques[0];
+
+      // Obtener días del bloque
+      const obtenerDiasBloque = (bloque) => {
+        const dias = [];
+        const inicio = new Date(bloque.inicio);
+        for (let i = 0; i < 28; i++) {
+          const fecha = new Date(inicio);
+          fecha.setDate(fecha.getDate() + i);
+          dias.push({
+            fecha: fecha.toISOString().split('T')[0],
+            diaSemana: fecha.getDay(), // 0 = domingo, 1 = lunes, etc.
+            diaMes: fecha.getDate()
+          });
+        }
+        return dias;
+      };
+
+      const diasBloque = obtenerDiasBloque(bloqueSeleccionado);
+
+      // Obtener estado de un empleado en un día específico
+      const obtenerEstadoEmpleado = (empleado, fecha) => {
+        // Verificar si tiene permiso
+        const permiso = data.permisos.find(p => 
+          p.policia_id === empleado.id && 
+          fecha >= p.fecha_inicio && 
+          fecha <= p.fecha_fin
+        );
+        if (permiso) return { tipo: permiso.tipo, esPermiso: true };
+
+        // Verificar si está en comisión
+        const comision = data.comisiones_servicio.find(c => 
+          fecha >= c.fecha_inicio && 
+          fecha <= c.fecha_fin && 
+          !c.excluidos_manuales?.includes(empleado.id)
+        );
+        if (comision) return { tipo: 'CS', localidad: comision.localidad, esComision: true };
+
+        // Verificar si está activo
+        if (!isAgentActiveOnDate(empleado.nombre, new Date(fecha))) {
+          return { tipo: 'BAJA', esBaja: true };
+        }
+
+        return null; // Disponible o sin turno
+      };
+
+      // Obtener color según tipo
+      const obtenerColorEstado = (estado) => {
+        if (!estado) return 'transparent';
+        switch(estado.tipo) {
+          case 'AP': return '#3b82f6';
+          case 'VA': return '#f97316';
+          case 'AFG': return '#a855f7';
+          case 'PT': return '#22c55e';
+          case 'CS': return '#eab308';
+          case 'BJ': return '#ef4444';
+          case 'BAJA': return '#6b7280';
+          default: return '#ef4444';
+        }
+      };
+
+      // Guardar anotación manual
+      const guardarAnotacion = (empleadoId, valor) => {
+        setAnotacionesBloque(prev => ({
+          ...prev,
+          [`${selectedBloque}_${empleadoId}`]: valor
+        }));
+      };
+
+      // Generar PDF del bloque
+      const generarPDFBloque = () => {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF('l', 'mm', 'a4'); // Horizontal, A4
+        
+        doc.setFontSize(16);
+        doc.text(`Resumen Bloque ${selectedBloque} - Gamo 50`, 14, 15);
+        
+        doc.setFontSize(10);
+        doc.text(`Periodo: ${bloqueSeleccionado.inicio} al ${bloqueSeleccionado.fin}`, 14, 22);
+
+        // Preparar datos para la tabla
+        const head = [['Categoría', 'Nombre', ...diasBloque.map(d => `${['D', 'L', 'M', 'X', 'J', 'V', 'S'][d.diaSemana]} ${d.diaMes}`), 'Anotación']];
+        
+        const body = data.efectivos
+          .filter(e => e.categoria !== 'EM')
+          .sort((a, b) => {
+            const catOrder = { 'Inspector': 0, 'Subinspector': 1, 'Oficial': 2, 'Policía': 3 };
+            return catOrder[a.categoria] - catOrder[b.categoria] || a.nombre.localeCompare(b.nombre);
+          })
+          .map(empleado => {
+            const row = [empleado.categoria, empleado.nombre];
+            diasBloque.forEach(dia => {
+              const estado = obtenerEstadoEmpleado(empleado, dia.fecha);
+              row.push(estado ? estado.tipo : '');
+            });
+            row.push(anotacionesBloque[`${selectedBloque}_${empleado.id}`] || '');
+            return row;
+          });
+
+        doc.autoTable({
+          startY: 28,
+          head: head,
+          body: body,
+          theme: 'grid',
+          headStyles: { fillColor: [30, 58, 138], fontSize: 6 },
+          bodyStyles: { fontSize: 6 },
+          columnStyles: {
+            0: { cellWidth: 20 },
+            1: { cellWidth: 35 },
+            ...Object.fromEntries(diasBloque.map((_, i) => [i + 2, { cellWidth: 8, halign: 'center' }])),
+            [diasBloque.length + 2]: { cellWidth: 15 }
+          },
+          margin: { left: 5, right: 5, top: 28, bottom: 10 },
+          styles: { overflow: 'linebreak' }
+        });
+
+        doc.save(`Resumen_Bloque_${selectedBloque}.pdf`);
+      };
+
       React.useEffect(() => {
         // Esperar a que Firebase esté inicializado
         const checkFirebase = () => {
@@ -585,7 +734,7 @@
         
         const [y, m] = consultaMes.split('-');
         const year = parseInt(y, 10);
-        const month = parseInt(m, 10) - 1;
+        const month = parseInt(m, 10) - 1; // JavaScript months are 0-indexed
         const firstDay = new Date(year, month, 1);
         const lastDay = new Date(year, month + 1, 0);
         
@@ -680,6 +829,7 @@
                 <Tab label="Gestión en Base" className="custom-tab" />
                 <Tab label="Gestión en Comisión de Servicio" className="custom-tab" />
                 <Tab label="Consulta Individual" className="custom-tab" />
+                <Tab label="Resumen Bloque" className="custom-tab" />
               </Tabs>
             </Paper>
 
@@ -990,6 +1140,88 @@
                   {renderCalendar()}
                 </Paper>
               )}
+            </TabPanel>
+
+            {/* TAB 3: RESUMEN BLOQUE */}
+            <TabPanel value={tabValue} index={3}>
+              <Paper className="glass-card" sx={{ p: 3, mb: 3 }}>
+                <Box display="flex" justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={2}>
+                  <Typography variant="h6" fontWeight="600">Resumen Bloque de 28 Días</Typography>
+                  <Box display="flex" gap={2} alignItems="center">
+                    <FormControl size="small" sx={{ minWidth: 250 }}>
+                      <InputLabel>Seleccionar Bloque</InputLabel>
+                      <Select value={selectedBloque} label="Seleccionar Bloque" onChange={(e) => setSelectedBloque(e.target.value)}>
+                        {bloques.map(b => <MenuItem key={b.numero} value={b.numero}>{b.label}</MenuItem>)}
+                      </Select>
+                    </FormControl>
+                    <Button variant="contained" color="secondary" onClick={generarPDFBloque} disableElevation startIcon={<span className="material-icons">picture_as_pdf</span>}>
+                      Exportar a PDF
+                    </Button>
+                  </Box>
+                </Box>
+                <Typography variant="body2" color="text.secondary" mt={1}>
+                  Periodo: {bloqueSeleccionado.inicio} al {bloqueSeleccionado.fin}
+                </Typography>
+              </Paper>
+
+              <Paper className="glass-card" sx={{ p: 3 }}>
+                <TableContainer sx={{ overflowX: 'auto' }}>
+                  <Table size="small" sx={{ minWidth: 2000 }}>
+                    <TableHead>
+                      <TableRow>
+                        <TableCell sx={{ fontWeight: 'bold', minWidth: 120 }}>Categoría</TableCell>
+                        <TableCell sx={{ fontWeight: 'bold', minWidth: 200 }}>Nombre y Apellidos</TableCell>
+                        {diasBloque.map((dia, idx) => (
+                          <TableCell key={idx} sx={{ fontWeight: 'bold', minWidth: 40, textAlign: 'center', padding: '8px 4px' }}>
+                            <Box fontSize={10}>{['D', 'L', 'M', 'X', 'J', 'V', 'S'][dia.diaSemana]}</Box>
+                            <Box fontSize={11} fontWeight="bold">{dia.diaMes}</Box>
+                          </TableCell>
+                        ))}
+                        <TableCell sx={{ fontWeight: 'bold', minWidth: 80, textAlign: 'center' }}>Anotación</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {data.efectivos
+                        .filter(e => e.categoria !== 'EM')
+                        .sort((a, b) => {
+                          const catOrder = { 'Inspector': 0, 'Subinspector': 1, 'Oficial': 2, 'Policía': 3 };
+                          return catOrder[a.categoria] - catOrder[b.categoria] || a.nombre.localeCompare(b.nombre);
+                        })
+                        .map(empleado => (
+                          <TableRow key={empleado.id}>
+                            <TableCell>{empleado.categoria}</TableCell>
+                            <TableCell>{empleado.nombre}</TableCell>
+                            {diasBloque.map((dia, idx) => {
+                              const estado = obtenerEstadoEmpleado(empleado, dia.fecha);
+                              const color = obtenerColorEstado(estado);
+                              return (
+                                <TableCell key={idx} sx={{ 
+                                  padding: '4px', 
+                                  textAlign: 'center',
+                                  backgroundColor: color,
+                                  color: color === 'transparent' ? 'inherit' : 'white',
+                                  fontWeight: color === 'transparent' ? 'normal' : 'bold',
+                                  fontSize: 11
+                                }}>
+                                  {estado ? estado.tipo : ''}
+                                </TableCell>
+                              );
+                            })}
+                            <TableCell sx={{ padding: '4px' }}>
+                              <TextField
+                                size="small"
+                                value={anotacionesBloque[`${selectedBloque}_${empleado.id}`] || ''}
+                                onChange={(e) => guardarAnotacion(empleado.id, e.target.value)}
+                                sx={{ width: 70 }}
+                                inputProps={{ style: { fontSize: 11, padding: '4px' } }}
+                              />
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              </Paper>
             </TabPanel>
 
             <Dialog open={dialogPermisoCalendar} onClose={() => setDialogPermisoCalendar(false)}>
