@@ -53,7 +53,7 @@
       firebase.initializeApp(firebaseConfig);
       const db = firebase.firestore();
       window.firebaseDB = db;
-      window.firebaseServerTimestamp = firebase.firestore.FieldValue.serverTimestamp();
+      window.firebaseServerTimestamp = firebase.firestore.FieldValue.serverTimestamp;
       
       // Hacer disponible globalmente para el script Babel
       window.firebaseInitialized = true;
@@ -253,23 +253,37 @@
         doc.text(`Periodo: ${bloqueSeleccionado.inicio} al ${bloqueSeleccionado.fin}`, 14, 22);
 
         // Preparar datos para la tabla
-        const head = [['Categoría', 'Nombre', ...diasBloque.map(d => `${['D', 'L', 'M', 'X', 'J', 'V', 'S'][d.diaSemana]} ${d.diaMes}`), 'Anotación']];
+        const head = [['Equipo', 'Categoría', 'Nombre', ...diasBloque.map(d => `${['D', 'L', 'M', 'X', 'J', 'V', 'S'][d.diaSemana]} ${d.diaMes}`), 'Anotación']];
         
-        const body = data.efectivos
-          .filter(e => e.categoria !== 'EM')
-          .sort((a, b) => {
-            const catOrder = { 'Inspector': 0, 'Subinspector': 1, 'Oficial': 2, 'Policía': 3 };
-            return catOrder[a.categoria] - catOrder[b.categoria] || a.nombre.localeCompare(b.nombre);
-          })
-          .map(empleado => {
-            const row = [empleado.categoria, empleado.nombre];
-            diasBloque.forEach(dia => {
-              const estado = obtenerEstadoEmpleado(empleado, dia.fecha);
-              row.push(estado ? estado.tipo : '');
+        const body = [];
+        Object.entries(
+          data.efectivos
+            .filter(e => e.categoria !== 'EM')
+            .reduce((acc, empleado) => {
+              const equipo = empleado.equipo || 'Sin Equipo';
+              if (!acc[equipo]) acc[equipo] = [];
+              acc[equipo].push(empleado);
+              return acc;
+            }, {})
+        )
+        .sort(([a], [b]) => a.localeCompare(b))
+        .forEach(([equipo, empleados]) => {
+          body.push([`Equipo ${equipo} (${empleados.length})`, '', '', ...Array(diasBloque.length).fill(''), '']);
+          empleados
+            .sort((a, b) => {
+              const catOrder = { 'Inspector': 0, 'Subinspector': 1, 'Oficial': 2, 'Policía': 3 };
+              return catOrder[a.categoria] - catOrder[b.categoria] || a.nombre.localeCompare(b.nombre);
+            })
+            .forEach(empleado => {
+              const row = [empleado.equipo, empleado.categoria, empleado.nombre];
+              diasBloque.forEach(dia => {
+                const estado = obtenerEstadoEmpleado(empleado, dia.fecha);
+                row.push(estado ? estado.tipo : '');
+              });
+              row.push(anotacionesBloque[`${selectedBloque}_${empleado.id}`] || '');
+              body.push(row);
             });
-            row.push(anotacionesBloque[`${selectedBloque}_${empleado.id}`] || '');
-            return row;
-          });
+        });
 
         doc.autoTable({
           startY: 28,
@@ -280,9 +294,10 @@
           bodyStyles: { fontSize: 6 },
           columnStyles: {
             0: { cellWidth: 20 },
-            1: { cellWidth: 35 },
-            ...Object.fromEntries(diasBloque.map((_, i) => [i + 2, { cellWidth: 8, halign: 'center' }])),
-            [diasBloque.length + 2]: { cellWidth: 15 }
+            1: { cellWidth: 18 },
+            2: { cellWidth: 32 },
+            ...Object.fromEntries(diasBloque.map((_, i) => [i + 3, { cellWidth: 8, halign: 'center' }])),
+            [diasBloque.length + 3]: { cellWidth: 15 }
           },
           margin: { left: 5, right: 5, top: 28, bottom: 10 },
           styles: { overflow: 'linebreak' }
@@ -392,7 +407,7 @@
             tipo: formData.tipo,
             fecha_inicio: formData.fecha_inicio,
             fecha_fin: formData.fecha_fin,
-            createdAt: window.firebaseServerTimestamp()
+            createdAt: firebase.firestore.FieldValue.serverTimestamp()
           };
           
           await db.collection('permisos').add(nuevoPermiso);
@@ -451,13 +466,13 @@
             tipo: calendarFormData.tipo,
             fecha_inicio: calendarFormData.fecha_inicio,
             fecha_fin: calendarFormData.fecha_fin,
-            updatedAt: window.firebaseServerTimestamp()
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
           };
           
           if (calendarFormData.id) {
             await db.collection('permisos').doc(calendarFormData.id).update(permisoData);
           } else {
-            permisoData.createdAt = window.firebaseServerTimestamp();
+            permisoData.createdAt = firebase.firestore.FieldValue.serverTimestamp();
             await db.collection('permisos').add(permisoData);
           }
           
@@ -519,7 +534,7 @@
             agregados: [],
             excluidos_manuales: [],
             observaciones: '',
-            createdAt: window.firebaseServerTimestamp()
+            createdAt: firebase.firestore.FieldValue.serverTimestamp()
           };
           
           const docRef = await db.collection('comisiones').add(nuevaComision);
@@ -1169,7 +1184,8 @@
                   <Table size="small" sx={{ minWidth: 2000 }}>
                     <TableHead>
                       <TableRow>
-                        <TableCell sx={{ fontWeight: 'bold', minWidth: 120 }}>Categoría</TableCell>
+                        <TableCell sx={{ fontWeight: 'bold', minWidth: 120 }}>Equipo</TableCell>
+                        <TableCell sx={{ fontWeight: 'bold', minWidth: 100 }}>Categoría</TableCell>
                         <TableCell sx={{ fontWeight: 'bold', minWidth: 200 }}>Nombre y Apellidos</TableCell>
                         {diasBloque.map((dia, idx) => (
                           <TableCell key={idx} sx={{ fontWeight: 'bold', minWidth: 40, textAlign: 'center', padding: '8px 4px' }}>
@@ -1181,43 +1197,65 @@
                       </TableRow>
                     </TableHead>
                     <TableBody>
-                      {data.efectivos
-                        .filter(e => e.categoria !== 'EM')
-                        .sort((a, b) => {
-                          const catOrder = { 'Inspector': 0, 'Subinspector': 1, 'Oficial': 2, 'Policía': 3 };
-                          return catOrder[a.categoria] - catOrder[b.categoria] || a.nombre.localeCompare(b.nombre);
-                        })
-                        .map(empleado => (
-                          <TableRow key={empleado.id}>
-                            <TableCell>{empleado.categoria}</TableCell>
-                            <TableCell>{empleado.nombre}</TableCell>
-                            {diasBloque.map((dia, idx) => {
-                              const estado = obtenerEstadoEmpleado(empleado, dia.fecha);
-                              const color = obtenerColorEstado(estado);
-                              return (
-                                <TableCell key={idx} sx={{ 
-                                  padding: '4px', 
-                                  textAlign: 'center',
-                                  backgroundColor: color,
-                                  color: color === 'transparent' ? 'inherit' : 'white',
-                                  fontWeight: color === 'transparent' ? 'normal' : 'bold',
-                                  fontSize: 11
-                                }}>
-                                  {estado ? estado.tipo : ''}
-                                </TableCell>
-                              );
-                            })}
-                            <TableCell sx={{ padding: '4px' }}>
-                              <TextField
-                                size="small"
-                                value={anotacionesBloque[`${selectedBloque}_${empleado.id}`] || ''}
-                                onChange={(e) => guardarAnotacion(empleado.id, e.target.value)}
-                                sx={{ width: 70 }}
-                                inputProps={{ style: { fontSize: 11, padding: '4px' } }}
-                              />
+                      {Object.entries(
+                        data.efectivos
+                          .filter(e => e.categoria !== 'EM')
+                          .reduce((acc, empleado) => {
+                            const equipo = empleado.equipo || 'Sin Equipo';
+                            if (!acc[equipo]) acc[equipo] = [];
+                            acc[equipo].push(empleado);
+                            return acc;
+                          }, {})
+                      )
+                      .sort(([a], [b]) => a.localeCompare(b))
+                      .map(([equipo, empleados]) => (
+                        <React.Fragment key={equipo}>
+                          <TableRow className="table-header-eo">
+                            <TableCell colSpan={diasBloque.length + 4}>
+                              <Typography variant="subtitle2" fontWeight="600" color="primary">
+                                Equipo {equipo} ({empleados.length} componentes)
+                              </Typography>
                             </TableCell>
                           </TableRow>
-                        ))}
+                          {empleados
+                            .sort((a, b) => {
+                              const catOrder = { 'Inspector': 0, 'Subinspector': 1, 'Oficial': 2, 'Policía': 3 };
+                              return catOrder[a.categoria] - catOrder[b.categoria] || a.nombre.localeCompare(b.nombre);
+                            })
+                            .map(empleado => (
+                              <TableRow key={empleado.id}>
+                                <TableCell>{empleado.equipo}</TableCell>
+                                <TableCell>{empleado.categoria}</TableCell>
+                                <TableCell>{empleado.nombre}</TableCell>
+                                {diasBloque.map((dia, idx) => {
+                                  const estado = obtenerEstadoEmpleado(empleado, dia.fecha);
+                                  const color = obtenerColorEstado(estado);
+                                  return (
+                                    <TableCell key={idx} sx={{ 
+                                      padding: '4px', 
+                                      textAlign: 'center',
+                                      backgroundColor: color,
+                                      color: color === 'transparent' ? 'inherit' : 'white',
+                                      fontWeight: color === 'transparent' ? 'normal' : 'bold',
+                                      fontSize: 11
+                                    }}>
+                                      {estado ? estado.tipo : ''}
+                                    </TableCell>
+                                  );
+                                })}
+                                <TableCell sx={{ padding: '4px' }}>
+                                  <TextField
+                                    size="small"
+                                    value={anotacionesBloque[`${selectedBloque}_${empleado.id}`] || ''}
+                                    onChange={(e) => guardarAnotacion(empleado.id, e.target.value)}
+                                    sx={{ width: 70 }}
+                                    inputProps={{ style: { fontSize: 11, padding: '4px' } }}
+                                  />
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                        </React.Fragment>
+                      ))}
                     </TableBody>
                   </Table>
                 </TableContainer>
