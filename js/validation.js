@@ -9,6 +9,9 @@
  * Convierte una string de fecha YYYY-MM-DD a objeto Date
  */
 function parseDate(dateStr) {
+  if (!dateStr || typeof dateStr !== 'string') {
+    throw new Error('Fecha inválida: ' + dateStr);
+  }
   const [year, month, day] = dateStr.split('-').map(Number);
   return new Date(year, month - 1, day);
 }
@@ -93,17 +96,25 @@ function checkPermisoQuotas(data, permiso) {
   const exemptTypes = ['AFG', 'BJ', 'CU', 'PT'];
   
   if (!exemptTypes.includes(permiso.tipo)) {
+    if (!permiso.fecha_inicio || !permiso.fecha_fin) {
+      throw new Error('El permiso no tiene fechas válidas');
+    }
     const fechaIni = parseDate(permiso.fecha_inicio);
     const fechaFin = parseDate(permiso.fecha_fin);
     
     // Buscar permisos solapados (excepto los exentos)
     const permisosSolapados = data.permisos.filter(p => {
       if (exemptTypes.includes(p.tipo)) return false;
+      if (!p.fecha_inicio || !p.fecha_fin) return false;
       
-      const pIni = parseDate(p.fecha_inicio);
-      const pFin = parseDate(p.fecha_fin);
-      
-      return datesOverlap(fechaIni, fechaFin, pIni, pFin);
+      try {
+        const pIni = parseDate(p.fecha_inicio);
+        const pFin = parseDate(p.fecha_fin);
+        return datesOverlap(fechaIni, fechaFin, pIni, pFin);
+      } catch (error) {
+        console.error('Error procesando permiso:', p, error);
+        return false;
+      }
     });
     
     const idsSolapados = permisosSolapados.map(p => p.policia_id);
