@@ -1151,7 +1151,11 @@
               {consultaAgenteId && consultaMes && (
                 <Paper className="glass-card" sx={{ p: 3, minHeight: '500px' }}>
                   <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
-                    <Typography variant="h6" fontWeight="600">Calendario: {consultaMes}</Typography>
+                    <Typography variant="h6" fontWeight="600">Calendario: {(() => {
+                      const [y, m] = consultaMes.split('-');
+                      const d = new Date(parseInt(y), parseInt(m) - 1, 1);
+                      return d.toLocaleString('es-ES', { month: 'long', year: 'numeric' }).charAt(0).toUpperCase() + d.toLocaleString('es-ES', { month: 'long', year: 'numeric' }).slice(1);
+                    })()}</Typography>
                     <Box display="flex" gap={1} flexWrap="wrap">
                       <Chip size="small" label="AP" sx={{bgcolor: '#3b82f6', color: 'white'}} />
                       <Chip size="small" label="VA" sx={{bgcolor: '#f97316', color: 'white'}} />
@@ -1190,25 +1194,29 @@
 
               <Paper className="glass-card" sx={{ p: 3 }}>
                 <TableContainer sx={{ overflow: 'auto', maxHeight: '70vh' }}>
-                  <Table size="small" sx={{ minWidth: 1600 }}>
+                  <Table size="small" sx={{ minWidth: 1600 }} stickyHeader>
                     <TableHead>
                       <TableRow>
                         <TableCell sx={{ fontWeight: 'bold', minWidth: 80 }}>Equipo</TableCell>
                         <TableCell sx={{ fontWeight: 'bold', minWidth: 70 }}>Categoría</TableCell>
                         <TableCell sx={{ fontWeight: 'bold', minWidth: 150 }}>Nombre y Apellidos</TableCell>
-                        {diasBloque.map((dia, idx) => (
-                          <TableCell key={idx} sx={{ 
-                            fontWeight: 'bold', 
-                            minWidth: 30, 
-                            textAlign: 'center', 
-                            padding: '4px 1px',
-                            backgroundColor: '#1e3a8a',
-                            color: 'white'
-                          }}>
-                            <Box fontSize={8}>{['D', 'L', 'M', 'X', 'J', 'V', 'S'][dia.diaSemana]}</Box>
-                            <Box fontSize={9} fontWeight="bold">{dia.diaMes}</Box>
-                          </TableCell>
-                        ))}
+                        {diasBloque.map((dia, idx) => {
+                          const today = new Date().toISOString().split('T')[0];
+                          const isToday = dia.fecha === today;
+                          return (
+                            <TableCell key={idx} sx={{ 
+                              fontWeight: 'bold', 
+                              minWidth: 30, 
+                              textAlign: 'center', 
+                              padding: '4px 1px',
+                              backgroundColor: isToday ? '#ff9800' : '#1e3a8a',
+                              color: 'white'
+                            }}>
+                              <Box fontSize={8}>{['D', 'L', 'M', 'X', 'J', 'V', 'S'][dia.diaSemana]}</Box>
+                              <Box fontSize={9} fontWeight="bold">{dia.diaMes}</Box>
+                            </TableCell>
+                          );
+                        })}
                         <TableCell sx={{ fontWeight: 'bold', minWidth: 60, textAlign: 'center' }}>Anotación</TableCell>
                       </TableRow>
                     </TableHead>

@@ -46,25 +46,18 @@ function isAgentActiveOnDate(agentName, targetDate) {
   const date2026_07_05 = new Date(2026, 6, 5); // Julio es mes 6 en JS (0-indexed)
   const date2026_07_11 = new Date(2026, 6, 11);
   
-  // Solo marcar como baja si el nombre coincide exactamente con los agentes específicos
-  // Usamos coincidencia más específica para evitar falsos positivos
+  // Lista específica de agentes con baja - usar nombres completos para evitar falsos positivos
   const bajaAgents = [
-    'Torres', // Solo si el nombre es exactamente "Torres" o contiene específicamente este apellido en contexto de baja
+    'Torres', // Solo si el nombre es exactamente "Torres"
   ];
   
   const excludedNames = ['Buenaventura', 'Castillo', 'Padilla', 'Valero'];
   
   // Verificar si es uno de los agentes específicos con baja
+  // Solo marcar como baja si el nombre completo coincide exactamente
   for (const bajaName of bajaAgents) {
-    // Solo marcar si el nombre contiene el apellido Y no es parte de un nombre compuesto válido
-    if (agentName.includes(bajaName) && targetDate >= date2026_07_05) {
-      // Verificar que no sea un caso falso positivo (ej: "Manuel Salvador Torres" no debería ser marcado)
-      // Solo marcar si el apellido está al final o es el único apellido
-      const parts = agentName.split(' ');
-      const lastName = parts[parts.length - 1];
-      if (lastName === bajaName) {
-        return false;
-      }
+    if (agentName === bajaName && targetDate >= date2026_07_05) {
+      return false;
     }
   }
   
