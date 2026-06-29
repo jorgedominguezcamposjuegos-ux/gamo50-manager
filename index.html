@@ -559,6 +559,28 @@
         }
       };
 
+      const handleDeleteComision = async (comisionId) => {
+        if (!window.confirm("¿Seguro que deseas eliminar esta comisión? Esta acción no se puede deshacer.")) return;
+        try {
+          const db = window.firebaseDB;
+          await db.collection('comisiones').doc(comisionId).delete();
+          
+          setSnackbar({ open: true, message: 'Comisión eliminada', severity: 'success' });
+          
+          // Si la comisión eliminada era la seleccionada, limpiar la selección
+          if (selectedComisionId === comisionId) {
+            setSelectedComisionId('');
+            setEfectivosComision(null);
+            setObservaciones('');
+          }
+          
+          fetchData();
+        } catch (error) {
+          console.error('Error eliminando comisión:', error);
+          setSnackbar({ open: true, message: 'Error eliminando comisión', severity: 'error' });
+        }
+      };
+
       const handleAddAgregado = async (e) => {
         e.preventDefault();
         try {
@@ -988,7 +1010,22 @@
                       <Select value={selectedComisionId} label="Seleccionar Comisión de Servicio" onChange={(e) => setSelectedComisionId(e.target.value)}>
                         <MenuItem value=""><em>-- Ninguna --</em></MenuItem>
                         {comisiones.map(c => (
-                          <MenuItem key={c.id} value={c.id}>Comisión {c.localidad} ({c.fecha_inicio} al {c.fecha_fin})</MenuItem>
+                          <MenuItem key={c.id} value={c.id}>
+                            <Box display="flex" justifyContent="space-between" alignItems="center" width="100%">
+                              <span>Comisión {c.localidad} ({c.fecha_inicio} al {c.fecha_fin})</span>
+                              <IconButton 
+                                size="small" 
+                                color="error" 
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteComision(c.id);
+                                }}
+                                sx={{ ml: 1 }}
+                              >
+                                <span className="material-icons" style={{fontSize: 18}}>delete</span>
+                              </IconButton>
+                            </Box>
+                          </MenuItem>
                         ))}
                       </Select>
                     </FormControl>
