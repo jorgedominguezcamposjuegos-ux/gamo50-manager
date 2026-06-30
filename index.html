@@ -727,19 +727,28 @@
         const { jsPDF } = window.jspdf;
         const doc = new jsPDF();
         
-        doc.setFontSize(16);
-        doc.text(`Distribución Gamo 50 Comisión ${selectedComObj.localidad}`, 14, 20);
+        // Título principal centrado
+        doc.setFontSize(18);
+        doc.setFont('helvetica', 'bold');
+        doc.text('CUADRANTE DE COMISIÓN DE SERVICIO', 105, 20, { align: 'center' });
         
-        doc.setFontSize(10);
-        doc.text(`Periodo: ${selectedComObj.fecha_inicio} al ${selectedComObj.fecha_fin}`, 14, 28);
-        doc.text(`Total Efectivos: ${totalGO}`, 14, 34);
+        // Información de la comisión
+        doc.setFontSize(12);
+        doc.setFont('helvetica', 'bold');
+        doc.text(`Comisión: ${selectedComObj.localidad}`, 14, 35);
+        
+        doc.setFontSize(11);
+        doc.setFont('helvetica', 'normal');
+        doc.text(`Periodo: ${selectedComObj.fecha_inicio} al ${selectedComObj.fecha_fin}`, 14, 45);
+        doc.text(`Total Efectivos: ${totalGO}`, 14, 52);
 
-        let currentY = 42;
+        let currentY = 65;
 
         Object.keys(agrupadosPorEO).sort().forEach(eq => {
           const nombreEq = eq.includes('Gamo') || eq.includes('EM') ? eq : `Equipo ${eq}`;
           
-          doc.setFontSize(12);
+          // Título del equipo
+          doc.setFontSize(13);
           doc.setFont('helvetica', 'bold');
           doc.text(`${nombreEq} (${agrupadosPorEO[eq].length} componentes)`, 14, currentY);
           
@@ -751,28 +760,51 @@
           ]);
 
           doc.autoTable({
-            startY: currentY + 4,
+            startY: currentY + 5,
             head: head,
             body: body,
             theme: 'grid',
-            headStyles: { fillColor: [30, 58, 138] },
+            headStyles: { 
+              fillColor: [30, 58, 138],
+              fontStyle: 'bold',
+              halign: 'center'
+            },
+            columnStyles: {
+              0: { cellWidth: 80 },
+              1: { cellWidth: 30, halign: 'center' },
+              2: { cellWidth: 40, halign: 'center' }
+            },
+            styles: {
+              fontSize: 9,
+              cellPadding: 3
+            },
             margin: { left: 14, right: 14 }
           });
 
-          currentY = doc.lastAutoTable.finalY + 12;
+          currentY = doc.lastAutoTable.finalY + 15;
         });
 
+        // Observaciones
         if (observaciones) {
-          doc.setFontSize(12);
+          doc.setFontSize(13);
           doc.setFont('helvetica', 'bold');
           doc.text("Observaciones:", 14, currentY);
           doc.setFontSize(10);
           doc.setFont('helvetica', 'normal');
           const splitObs = doc.splitTextToSize(observaciones, 180);
-          doc.text(splitObs, 14, currentY + 6);
+          doc.text(splitObs, 14, currentY + 8);
         }
 
-        doc.save(`Distribucion_Comision_${selectedComObj.localidad.replace(/\s+/g, '_')}.pdf`);
+        // Pie de página
+        const pageCount = doc.internal.getNumberOfPages();
+        for (let i = 1; i <= pageCount; i++) {
+          doc.setPage(i);
+          doc.setFontSize(8);
+          doc.setFont('helvetica', 'normal');
+          doc.text(`Página ${i} de ${pageCount}`, 105, 290, { align: 'center' });
+        }
+
+        doc.save(`Cuadrante_Comision_${selectedComObj.localidad.replace(/\s+/g, '_')}.pdf`);
       };
 
       const renderCalendar = () => {
@@ -1230,6 +1262,16 @@
               </Paper>
 
               <Paper className="glass-card" sx={{ p: 3 }}>
+                <Typography variant="subtitle1" fontWeight="600" mb={2}>
+                  {(() => {
+                    const fechaInicio = new Date(bloqueSeleccionado.inicio);
+                    const fechaFin = new Date(bloqueSeleccionado.fin);
+                    const mesInicio = fechaInicio.toLocaleString('es-ES', { month: 'long' }).charAt(0).toUpperCase() + fechaInicio.toLocaleString('es-ES', { month: 'long' }).slice(1);
+                    const mesFin = fechaFin.toLocaleString('es-ES', { month: 'long' }).charAt(0).toUpperCase() + fechaFin.toLocaleString('es-ES', { month: 'long' }).slice(1);
+                    const meses = mesInicio === mesFin ? mesInicio : `${mesInicio}-${mesFin}`;
+                    return `${meses} en el bloque ${selectedBloque}`;
+                  })()}
+                </Typography>
                 <TableContainer sx={{ overflow: 'auto', maxHeight: '70vh' }}>
                   <Table size="small" sx={{ minWidth: 1600 }} stickyHeader>
                     <TableHead>
