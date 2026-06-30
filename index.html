@@ -728,27 +728,32 @@
         const doc = new jsPDF();
         
         // Título principal centrado
-        doc.setFontSize(18);
+        doc.setFontSize(20);
         doc.setFont('helvetica', 'bold');
         doc.text('CUADRANTE DE COMISIÓN DE SERVICIO', 105, 20, { align: 'center' });
         
-        // Información de la comisión
-        doc.setFontSize(12);
-        doc.setFont('helvetica', 'bold');
-        doc.text(`Comisión: ${selectedComObj.localidad}`, 14, 35);
+        // Línea separadora debajo del título
+        doc.setDrawColor(0, 0, 0);
+        doc.setLineWidth(0.5);
+        doc.line(14, 25, 196, 25);
         
-        doc.setFontSize(11);
+        // Información de la comisión
+        doc.setFontSize(14);
+        doc.setFont('helvetica', 'bold');
+        doc.text(`Comisión: ${selectedComObj.localidad}`, 14, 38);
+        
+        doc.setFontSize(12);
         doc.setFont('helvetica', 'normal');
-        doc.text(`Periodo: ${selectedComObj.fecha_inicio} al ${selectedComObj.fecha_fin}`, 14, 45);
-        doc.text(`Total Efectivos: ${totalGO}`, 14, 52);
+        doc.text(`Periodo: ${selectedComObj.fecha_inicio} al ${selectedComObj.fecha_fin}`, 14, 48);
+        doc.text(`Total Efectivos: ${totalGO}`, 14, 56);
 
-        let currentY = 65;
+        let currentY = 70;
 
         Object.keys(agrupadosPorEO).sort().forEach(eq => {
           const nombreEq = eq.includes('Gamo') || eq.includes('EM') ? eq : `Equipo ${eq}`;
           
           // Título del equipo
-          doc.setFontSize(13);
+          doc.setFontSize(14);
           doc.setFont('helvetica', 'bold');
           doc.text(`${nombreEq} (${agrupadosPorEO[eq].length} componentes)`, 14, currentY);
           
@@ -760,36 +765,40 @@
           ]);
 
           doc.autoTable({
-            startY: currentY + 5,
+            startY: currentY + 6,
             head: head,
             body: body,
             theme: 'grid',
             headStyles: { 
               fillColor: [30, 58, 138],
               fontStyle: 'bold',
-              halign: 'center'
+              halign: 'center',
+              fontSize: 11,
+              textColor: 255
             },
             columnStyles: {
-              0: { cellWidth: 80 },
-              1: { cellWidth: 30, halign: 'center' },
-              2: { cellWidth: 40, halign: 'center' }
+              0: { cellWidth: 90 },
+              1: { cellWidth: 35, halign: 'center' },
+              2: { cellWidth: 45, halign: 'center' }
             },
             styles: {
-              fontSize: 9,
-              cellPadding: 3
+              fontSize: 10,
+              cellPadding: 4,
+              lineColor: [0, 0, 0],
+              lineWidth: 0.1
             },
             margin: { left: 14, right: 14 }
           });
 
-          currentY = doc.lastAutoTable.finalY + 15;
+          currentY = doc.lastAutoTable.finalY + 18;
         });
 
         // Observaciones
         if (observaciones) {
-          doc.setFontSize(13);
+          doc.setFontSize(14);
           doc.setFont('helvetica', 'bold');
           doc.text("Observaciones:", 14, currentY);
-          doc.setFontSize(10);
+          doc.setFontSize(11);
           doc.setFont('helvetica', 'normal');
           const splitObs = doc.splitTextToSize(observaciones, 180);
           doc.text(splitObs, 14, currentY + 8);
@@ -799,7 +808,7 @@
         const pageCount = doc.internal.getNumberOfPages();
         for (let i = 1; i <= pageCount; i++) {
           doc.setPage(i);
-          doc.setFontSize(8);
+          doc.setFontSize(9);
           doc.setFont('helvetica', 'normal');
           doc.text(`Página ${i} de ${pageCount}`, 105, 290, { align: 'center' });
         }
