@@ -103,7 +103,9 @@
       const hoy = new Date();
       for(let i = -12; i <= 24; i++) {
         const d = new Date(hoy.getFullYear(), hoy.getMonth() + i, 1);
-        const val = d.toISOString().slice(0, 7);
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const val = `${year}-${month}`;
         const label = d.toLocaleString('es-ES', { month: 'long', year: 'numeric' });
         meses.push({ val, label: label.charAt(0).toUpperCase() + label.slice(1) });
       }
