@@ -917,6 +917,7 @@
                 <Tab label="Gestión en Comisión de Servicio" className="custom-tab" />
                 <Tab label="Consulta Individual" className="custom-tab" />
                 <Tab label="Resumen Bloque" className="custom-tab" />
+                <Tab label="Integrantes G50" className="custom-tab" />
               </Tabs>
             </Paper>
 
@@ -1371,6 +1372,94 @@
                     </TableBody>
                   </Table>
                 </TableContainer>
+              </Paper>
+            </TabPanel>
+
+            {/* TAB 4: INTEGRANTES G50 */}
+            <TabPanel value={tabValue} index={4}>
+              <Paper className="glass-card" sx={{ p: 3 }}>
+                <Typography variant="h6" mb={3} fontWeight="600">Composición G50</Typography>
+                
+                {(() => {
+                  // Agrupar por SO (Subgrupo)
+                  const agrupadosPorSO = data.efectivos.reduce((acc, empleado) => {
+                    const so = empleado.so || 'Sin SO';
+                    if (!acc[so]) acc[so] = [];
+                    acc[so].push(empleado);
+                    return acc;
+                  }, {});
+
+                  // Agrupar por Equipo dentro de cada SO
+                  const estructura = Object.keys(agrupadosPorSO).sort().map(so => {
+                    const agentesSO = agrupadosPorSO[so];
+                    const agrupadosPorEquipo = agentesSO.reduce((acc, empleado) => {
+                      const equipo = empleado.equipo || 'Sin Equipo';
+                      if (!acc[equipo]) acc[equipo] = [];
+                      acc[equipo].push(empleado);
+                      return acc;
+                    }, {});
+
+                    return {
+                      so,
+                      totalSO: agentesSO.length,
+                      equipos: Object.keys(agrupadosPorEquipo).sort().map(equipo => ({
+                        equipo,
+                        totalEquipo: agrupadosPorEquipo[equipo].length,
+                        agentes: agrupadosPorEquipo[equipo].sort((a, b) => {
+                          const catOrder = { 'Inspector': 0, 'Subinspector': 1, 'Oficial': 2, 'Policía': 3 };
+                          return catOrder[a.categoria] - catOrder[b.categoria] || a.nombre.localeCompare(b.nombre);
+                        })
+                      }))
+                    };
+                  });
+
+                  const totalGrupo = data.efectivos.length;
+
+                  return (
+                    <Box>
+                      <Typography variant="h5" fontWeight="bold" mb={3}>
+                        Composición G50: {totalGrupo} agentes
+                      </Typography>
+
+                      {estructura.map(({ so, totalSO, equipos }) => (
+                        <Box key={so} mb={4}>
+                          <Typography variant="h6" fontWeight="bold" color="primary" mb={2}>
+                            {so === 'EM' ? 'EM' : `Gamo ${so}`}: {totalSO} agentes
+                          </Typography>
+
+                          {equipos.map(({ equipo, totalEquipo, agentes }) => (
+                            <Box key={equipo} mb={3} ml={3}>
+                              <Typography variant="subtitle1" fontWeight="600" color="secondary" mb={2}>
+                                {equipo.includes('Gamo') || equipo.includes('EM') ? equipo : `Equipo ${equipo}`}: {totalEquipo} agentes
+                              </Typography>
+
+                              <TableContainer sx={{ maxWidth: 800 }}>
+                                <Table size="small">
+                                  <TableHead>
+                                    <TableRow>
+                                      <TableCell sx={{ fontWeight: 'bold' }}>Nombre</TableCell>
+                                      <TableCell sx={{ fontWeight: 'bold' }}>Categoría</TableCell>
+                                      <TableCell sx={{ fontWeight: 'bold' }}>Equipo</TableCell>
+                                    </TableRow>
+                                  </TableHead>
+                                  <TableBody>
+                                    {agentes.map(agente => (
+                                      <TableRow key={agente.id}>
+                                        <TableCell>{agente.nombre}</TableCell>
+                                        <TableCell>{agente.categoria}</TableCell>
+                                        <TableCell>{agente.equipo}</TableCell>
+                                      </TableRow>
+                                    ))}
+                                  </TableBody>
+                                </Table>
+                              </TableContainer>
+                            </Box>
+                          ))}
+                        </Box>
+                      ))}
+                    </Box>
+                  );
+                })()}
               </Paper>
             </TabPanel>
 
