@@ -894,7 +894,8 @@
         for (let i = 0; i < startDayOfWeek; i++) days.push(null);
         
         for (let d = 1; d <= lastDay.getDate(); d++) {
-          const dStr = new Date(year, month, d, 12).toISOString().split('T')[0];
+          const date = new Date(year, month, d);
+          const dStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
           days.push(dStr);
         }
 
