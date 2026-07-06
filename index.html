@@ -139,7 +139,10 @@
       const [guardandoObs, setGuardandoObs] = React.useState(false);
 
       const [consultaAgenteId, setConsultaAgenteId] = React.useState('');
-      const [consultaMes, setConsultaMes] = React.useState(new Date().toISOString().slice(0, 7));
+      const hoy = new Date();
+      const mesActual = String(hoy.getMonth() + 1).padStart(2, '0');
+      const anioActual = hoy.getFullYear();
+      const [consultaMes, setConsultaMes] = React.useState(`${anioActual}-${mesActual}`);
       const [filtroEOConsulta, setFiltroEOConsulta] = React.useState('Todos');
       const [dialogPermisoCalendar, setDialogPermisoCalendar] = React.useState(false);
       const [calendarFormData, setCalendarFormData] = React.useState({ id: '', policia_id: '', tipo: 'VA', fecha_inicio: '', fecha_fin: '' });
@@ -147,6 +150,10 @@
       // Estado para Resumen Bloque
       const [selectedBloque, setSelectedBloque] = React.useState(325);
       const [anotacionesBloque, setAnotacionesBloque] = React.useState({});
+
+      // Estado para anotaciones de Integrantes G50
+      const [anotacionesG50, setAnotacionesG50] = React.useState('');
+      const [guardandoAnotacionG50, setGuardandoAnotacionG50] = React.useState(false);
 
       // Generar bloques de 28 días
       const generarBloques = () => {
@@ -364,6 +371,12 @@
           console.log('✅ Comisiones snapshot:', comisionesSnapshot.size, 'documentos');
           const comisionesData = comisionesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
           
+          // Cargar anotaciones de G50
+          const anotacionesG50Doc = await db.collection('config').doc('anotaciones_g50').get();
+          if (anotacionesG50Doc.exists) {
+            setAnotacionesG50(anotacionesG50Doc.data().texto || '');
+          }
+          
           console.log('✅ Datos cargados:', { efectivos: efectivos.length, permisos: permisos.length, comisiones: comisionesData.length });
           setData({ efectivos, permisos, comisiones_servicio: comisionesData });
           setComisiones(comisionesData);
@@ -580,6 +593,53 @@
         } catch (error) {
           console.error('Error eliminando comisión:', error);
           setSnackbar({ open: true, message: 'Error eliminando comisión', severity: 'error' });
+        }
+      };
+
+      const handleDeleteAgentes = async () => {
+        const agentesAEliminar = [
+          { id: 'manuel_valero', nombre: 'Manuel Valero Vacas' },
+          { id: 'jose_gonzalez', nombre: 'José María González Torres' },
+          { id: 'buenaventura_castillo', nombre: 'Buenaventura Castillo Padilla' }
+        ];
+
+        if (!window.confirm(`¿Seguro que deseas eliminar permanentemente a los siguientes agentes de Firebase?\n\n${agentesAEliminar.map(a => `- ${a.nombre}`).join('\n')}\n\nEsta acción no se puede deshacer.`)) return;
+
+        try {
+          const db = window.firebaseDB;
+          
+          for (const agente of agentesAEliminar) {
+            // Eliminar el agente de la colección efectivos
+            await db.collection('efectivos').doc(agente.id).delete();
+            
+            // Eliminar todos los permisos asociados a este agente
+            const permisosSnapshot = await db.collection('permisos').where('policia_id', '==', agente.id).get();
+            const batch = db.batch();
+            permisosSnapshot.docs.forEach(doc => {
+              batch.delete(doc.ref);
+            });
+            await batch.commit();
+          }
+
+          setSnackbar({ open: true, message: 'Agentes eliminados correctamente de Firebase', severity: 'success' });
+          fetchData();
+        } catch (error) {
+          console.error('Error eliminando agentes:', error);
+          setSnackbar({ open: true, message: 'Error eliminando agentes: ' + error.message, severity: 'error' });
+        }
+      };
+
+      const handleGuardarAnotacionG50 = async () => {
+        setGuardandoAnotacionG50(true);
+        try {
+          const db = window.firebaseDB;
+          await db.collection('config').doc('anotaciones_g50').set({ texto: anotacionesG50 });
+          setSnackbar({ open: true, message: 'Anotación guardada', severity: 'success' });
+        } catch (error) {
+          console.error('Error guardando anotación:', error);
+          setSnackbar({ open: true, message: 'Error guardando anotación', severity: 'error' });
+        } finally {
+          setGuardandoAnotacionG50(false);
         }
       };
 
@@ -1380,7 +1440,42 @@
             {/* TAB 4: INTEGRANTES G50 */}
             <TabPanel value={tabValue} index={4}>
               <Paper className="glass-card" sx={{ p: 3 }}>
-                <Typography variant="h6" mb={3} fontWeight="600">Composición G50</Typography>
+                <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
+                  <Typography variant="h6" fontWeight="600">Composición G50</Typography>
+                  <Button 
+                    variant="contained" 
+                    color="error" 
+                    onClick={handleDeleteAgentes}
+                    size="small"
+                  >
+                    Eliminar agentes de Firebase
+                  </Button>
+                </Box>
+
+                <Box mb={4}>
+                  <Typography variant="subtitle1" fontWeight="600" mb={2}>Anotaciones</Typography>
+                  <TextField
+                    fullWidth
+                    multiline
+                    rows={4}
+                    value={anotacionesG50}
+                    onChange={(e) => setAnotacionesG50(e.target.value)}
+                    placeholder="Escribe tus anotaciones aquí..."
+                    variant="outlined"
+                    size="small"
+                  />
+                  <Box mt={1} display="flex" justifyContent="flex-end">
+                    <Button
+                      variant="contained"
+                      color="primary"
+                      onClick={handleGuardarAnotacionG50}
+                      disabled={guardandoAnotacionG50}
+                      size="small"
+                    >
+                      {guardandoAnotacionG50 ? 'Guardando...' : 'Guardar anotación'}
+                    </Button>
+                  </Box>
+                </Box>
                 
                 {(() => {
                   // Agrupar por SO (Subgrupo)
