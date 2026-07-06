@@ -59,6 +59,7 @@
   <script>
     // Inicializar Firebase con compat SDK
     try {
+      console.log('🔥 Iniciando Firebase con config:', firebaseConfig);
       firebase.initializeApp(firebaseConfig);
       const db = firebase.firestore();
       window.firebaseDB = db;
@@ -69,8 +70,9 @@
       console.log('✅ Firebase inicializado correctamente');
     } catch (error) {
       console.error('❌ Error inicializando Firebase:', error);
+      console.error('❌ Detalles del error:', error.code, error.message, error.stack);
       window.firebaseInitialized = false;
-      window.firebaseError = error.message;
+      window.firebaseError = error.message + ' (' + error.code + ')';
     }
   </script>
 
@@ -742,7 +744,7 @@
             <CssBaseline />
             <Container className="app-container" maxWidth="xl">
               <Alert severity="error">
-                Error cargando datos. Verifica la configuración de Firebase en js/firebase-config.js
+                Error cargando datos. Verifica la configuración de Firebase y la conexión a internet.
               </Alert>
             </Container>
           </ThemeProvider>
