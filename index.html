@@ -382,10 +382,14 @@
           console.log('✅ Comisiones snapshot:', comisionesSnapshot.size, 'documentos');
           const comisionesData = comisionesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
           
-          // Cargar anotaciones de G50
-          const anotacionesG50Doc = await db.collection('config').doc('anotaciones_g50').get();
-          if (anotacionesG50Doc.exists) {
-            setAnotacionesG50(anotacionesG50Doc.data().texto || '');
+          // Cargar anotaciones de G50 (manejar caso donde colección no existe)
+          try {
+            const anotacionesG50Doc = await db.collection('config').doc('anotaciones_g50').get();
+            if (anotacionesG50Doc.exists) {
+              setAnotacionesG50(anotacionesG50Doc.data().texto || '');
+            }
+          } catch (error) {
+            console.warn('⚠️ No se pudieron cargar anotaciones G50 (colección config puede no existir):', error.message);
           }
           
           console.log('✅ Datos cargados:', { efectivos: efectivos.length, permisos: permisos.length, comisiones: comisionesData.length });
@@ -648,7 +652,7 @@
           setSnackbar({ open: true, message: 'Anotación guardada', severity: 'success' });
         } catch (error) {
           console.error('Error guardando anotación:', error);
-          setSnackbar({ open: true, message: 'Error guardando anotación', severity: 'error' });
+          setSnackbar({ open: true, message: 'Error guardando anotación (colección config puede no existir en Firestore)', severity: 'error' });
         } finally {
           setGuardandoAnotacionG50(false);
         }
