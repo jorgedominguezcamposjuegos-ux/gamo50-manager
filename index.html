@@ -360,7 +360,7 @@
 
       const fetchData = async () => {
         try {
-          console.log('📥 Iniciando carga de datos...');
+          console.log('📥 Iniciando carga de datos desde Firebase...');
           const db = window.firebaseDB;
           console.log('🔥 DB:', db);
           
@@ -392,14 +392,32 @@
             console.warn('⚠️ No se pudieron cargar anotaciones G50 (colección config puede no existir):', error.message);
           }
           
-          console.log('✅ Datos cargados:', { efectivos: efectivos.length, permisos: permisos.length, comisiones: comisionesData.length });
+          console.log('✅ Datos cargados desde Firebase:', { efectivos: efectivos.length, permisos: permisos.length, comisiones: comisionesData.length });
           setData({ efectivos, permisos, comisiones_servicio: comisionesData });
           setComisiones(comisionesData);
           setLoading(false);
         } catch (error) {
-          console.error('❌ Error cargando datos:', error);
-          setSnackbar({ open: true, message: 'Error cargando datos: ' + error.message, severity: 'error' });
-          setLoading(false);
+          console.error('❌ Error cargando datos desde Firebase:', error);
+          console.log('🔄 Intentando cargar datos del archivo local...');
+          
+          // Fallback: cargar del archivo JSON local
+          try {
+            const response = await fetch('data.json');
+            const localData = await response.json();
+            console.log('✅ Datos cargados del archivo local:', { efectivos: localData.efectivos.length, permisos: localData.permisos.length, comisiones: localData.comisiones_servicio?.length || 0 });
+            setData({ 
+              efectivos: localData.efectivos, 
+              permisos: localData.permisos || [], 
+              comisiones_servicio: localData.comisiones_servicio || [] 
+            });
+            setComisiones(localData.comisiones_servicio || []);
+            setSnackbar({ open: true, message: 'Datos cargados del archivo local (Firebase no disponible)', severity: 'warning' });
+            setLoading(false);
+          } catch (localError) {
+            console.error('❌ Error cargando datos del archivo local:', localError);
+            setSnackbar({ open: true, message: 'Error cargando datos: Firebase y archivo local no disponibles', severity: 'error' });
+            setLoading(false);
+          }
         }
       };
 

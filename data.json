@@ -1,0 +1,940 @@
+{
+  "efectivos": [
+    {
+      "id": "jorge_dominguez",
+      "nombre": "Jorge Dominguez Campos",
+      "categoria": "Inspector",
+      "so": "EM",
+      "equipo": "50",
+      "funcion": "Mando",
+      "en_funciones": false
+    },
+    {
+      "id": "roberto_villacreces",
+      "nombre": "Roberto Villacreces Sáez",
+      "categoria": "Policía",
+      "so": "EM",
+      "equipo": "50",
+      "funcion": "Componente",
+      "en_funciones": false
+    },
+    {
+      "id": "miguel_criado",
+      "nombre": "Miguel Ángel Criado González",
+      "categoria": "Policía",
+      "so": "EM",
+      "equipo": "50",
+      "funcion": "Componente",
+      "en_funciones": false
+    },
+    {
+      "id": "gonzalo_garcia",
+      "nombre": "Gonzalo Ricardo García Portillo",
+      "categoria": "Policía",
+      "so": "EM",
+      "equipo": "50",
+      "funcion": "Componente",
+      "en_funciones": false
+    },
+    {
+      "id": "david_servi",
+      "nombre": "David Servi López",
+      "categoria": "Subinspector",
+      "so": "51",
+      "equipo": "51",
+      "funcion": "JSO",
+      "en_funciones": false
+    },
+    {
+      "id": "sarin_garcia",
+      "nombre": "Sarín García Garrancho",
+      "categoria": "Oficial",
+      "so": "51",
+      "equipo": "52",
+      "funcion": "JEO",
+      "en_funciones": false
+    },
+    {
+      "id": "jorge_bautista",
+      "nombre": "Jorge Bautista Pérez",
+      "categoria": "Policía",
+      "so": "51",
+      "equipo": "52",
+      "funcion": "Componente",
+      "en_funciones": false
+    },
+    {
+      "id": "ivan_gamiz",
+      "nombre": "Iván Gamiz Tallón",
+      "categoria": "Policía",
+      "so": "51",
+      "equipo": "52",
+      "funcion": "Componente",
+      "en_funciones": false
+    },
+    {
+      "id": "pablo_montalvo",
+      "nombre": "Pablo Montalvo Linde",
+      "categoria": "Policía",
+      "so": "51",
+      "equipo": "52",
+      "funcion": "Componente",
+      "en_funciones": true
+    },
+    {
+      "id": "alejandro_mudarra",
+      "nombre": "Alejandro Mudarra Cano",
+      "categoria": "Policía",
+      "so": "51",
+      "equipo": "52",
+      "funcion": "Componente",
+      "en_funciones": false
+    },
+    {
+      "id": "juan_santiago",
+      "nombre": "Juan Antonio Santiago Martín",
+      "categoria": "Policía",
+      "so": "51",
+      "equipo": "52",
+      "funcion": "Componente",
+      "en_funciones": false
+    },
+    {
+      "id": "pedro_marin",
+      "nombre": "Pedro Marín Sánchez",
+      "categoria": "Oficial",
+      "so": "51",
+      "equipo": "53",
+      "funcion": "JEO",
+      "en_funciones": false
+    },
+    {
+      "id": "david_mancilla",
+      "nombre": "David Mancilla Marta",
+      "categoria": "Policía",
+      "so": "51",
+      "equipo": "53",
+      "funcion": "Componente",
+      "en_funciones": false
+    },
+    {
+      "id": "francisco_sanchez",
+      "nombre": "Francisco Javier Sánchez Oviedo",
+      "categoria": "Policía",
+      "so": "51",
+      "equipo": "53",
+      "funcion": "Componente",
+      "en_funciones": false
+    },
+    {
+      "id": "jesus_romera",
+      "nombre": "Jesús Romera Castarnado",
+      "categoria": "Policía",
+      "so": "51",
+      "equipo": "53",
+      "funcion": "Componente",
+      "en_funciones": false
+    },
+    {
+      "id": "antonio_alvarez",
+      "nombre": "Antonio Álvarez Salmerón",
+      "categoria": "Policía",
+      "so": "51",
+      "equipo": "53",
+      "funcion": "Componente",
+      "en_funciones": false
+    },
+    {
+      "id": "raul_perez",
+      "nombre": "Raúl Pérez",
+      "categoria": "Oficial",
+      "so": "54",
+      "equipo": "54",
+      "funcion": "JSO",
+      "en_funciones": true
+    },
+    {
+      "id": "rafael_martin",
+      "nombre": "Rafael Martín López",
+      "categoria": "Oficial",
+      "so": "54",
+      "equipo": "55",
+      "funcion": "JEO",
+      "en_funciones": false
+    },
+    {
+      "id": "mario_fernandez",
+      "nombre": "Mario Fernández Villa",
+      "categoria": "Policía",
+      "so": "54",
+      "equipo": "55",
+      "funcion": "Componente",
+      "en_funciones": true
+    },
+    {
+      "id": "ignacio_gomez",
+      "nombre": "Ignacio Gómez Blanco",
+      "categoria": "Policía",
+      "so": "54",
+      "equipo": "55",
+      "funcion": "Componente",
+      "en_funciones": false
+    },
+    {
+      "id": "jose_molina",
+      "nombre": "José Manuel Molina Vera",
+      "categoria": "Policía",
+      "so": "54",
+      "equipo": "55",
+      "funcion": "Componente",
+      "en_funciones": false
+    },
+    {
+      "id": "manuel_salvador",
+      "nombre": "Manuel Salvador Torres",
+      "categoria": "Policía",
+      "so": "54",
+      "equipo": "55",
+      "funcion": "Componente",
+      "en_funciones": false
+    },
+    {
+      "id": "david_sanchez",
+      "nombre": "David M. Sánchez Molero",
+      "categoria": "Policía",
+      "so": "54",
+      "equipo": "55",
+      "funcion": "Componente",
+      "en_funciones": false
+    },
+    {
+      "id": "salvador_jimenez",
+      "nombre": "Salvador Jiménez López",
+      "categoria": "Policía",
+      "so": "54",
+      "equipo": "56",
+      "funcion": "JEO",
+      "en_funciones": true
+    },
+    {
+      "id": "juan_beltran",
+      "nombre": "Juan José Beltrán Polo",
+      "categoria": "Policía",
+      "so": "54",
+      "equipo": "56",
+      "funcion": "Componente",
+      "en_funciones": false
+    },
+    {
+      "id": "jose_guardiola",
+      "nombre": "Jose Joaquin Guardiola Piñera",
+      "categoria": "Policía",
+      "so": "54",
+      "equipo": "56",
+      "funcion": "Componente",
+      "en_funciones": false
+    },
+    {
+      "id": "rafael_varela",
+      "nombre": "Rafael Guillermo Varela Fernández",
+      "categoria": "Policía",
+      "so": "54",
+      "equipo": "56",
+      "funcion": "Componente",
+      "en_funciones": false
+    },
+    {
+      "id": "rafael_villena",
+      "nombre": "Rafael Villena González",
+      "categoria": "Policía",
+      "so": "54",
+      "equipo": "56",
+      "funcion": "Componente",
+      "en_funciones": false
+    },
+    {
+      "id": "fran_perez",
+      "nombre": "Fran Pérez",
+      "categoria": "Oficial",
+      "so": "57",
+      "equipo": "57",
+      "funcion": "JSO",
+      "en_funciones": true
+    },
+    {
+      "id": "sergio_cabrera",
+      "nombre": "Sergio Cabrera García",
+      "categoria": "Oficial",
+      "so": "57",
+      "equipo": "58",
+      "funcion": "JEO",
+      "en_funciones": false
+    },
+    {
+      "id": "alberto_perez",
+      "nombre": "Alberto Jesús Pérez González",
+      "categoria": "Policía",
+      "so": "57",
+      "equipo": "58",
+      "funcion": "Componente",
+      "en_funciones": true
+    },
+    {
+      "id": "victor_alvarez",
+      "nombre": "Víctor Álvarez Bonilla",
+      "categoria": "Policía",
+      "so": "57",
+      "equipo": "58",
+      "funcion": "Componente",
+      "en_funciones": false
+    },
+    {
+      "id": "alejandro_cardenas",
+      "nombre": "Alejandro Cárdenas Trujillo",
+      "categoria": "Policía",
+      "so": "57",
+      "equipo": "58",
+      "funcion": "Componente",
+      "en_funciones": false
+    },
+    {
+      "id": "francisco_martinez",
+      "nombre": "Francisco Martínez Ruiz",
+      "categoria": "Policía",
+      "so": "57",
+      "equipo": "58",
+      "funcion": "Componente",
+      "en_funciones": false
+    },
+    {
+      "id": "diego_garcia",
+      "nombre": "Diego García-Valenzuela Herrera",
+      "categoria": "Policía",
+      "so": "57",
+      "equipo": "58",
+      "funcion": "Componente",
+      "en_funciones": false
+    },
+    {
+      "id": "jose_arcos",
+      "nombre": "José Antonio Arcos Ureña",
+      "categoria": "Policía",
+      "so": "57",
+      "equipo": "59",
+      "funcion": "JEO",
+      "en_funciones": true
+    },
+    {
+      "id": "amador_perez",
+      "nombre": "Amador Pérez García",
+      "categoria": "Policía",
+      "so": "57",
+      "equipo": "59",
+      "funcion": "Componente",
+      "en_funciones": false
+    },
+    {
+      "id": "carlos_ruiz",
+      "nombre": "Carlos Ruiz Illescas",
+      "categoria": "Policía",
+      "so": "57",
+      "equipo": "59",
+      "funcion": "Componente",
+      "en_funciones": false
+    },
+    {
+      "id": "jose_tobaruela",
+      "nombre": "José Antonio Tobaruela García",
+      "categoria": "Policía",
+      "so": "57",
+      "equipo": "59",
+      "funcion": "Componente",
+      "en_funciones": false
+    },
+    {
+      "id": "manuel_tojo",
+      "nombre": "Manuel Tojo López",
+      "categoria": "Policía",
+      "so": "57",
+      "equipo": "59",
+      "funcion": "Componente",
+      "en_funciones": false
+    }
+  ],
+  "permisos": [
+    {
+      "policia_id": "jose_arcos",
+      "tipo": "VA",
+      "fecha_inicio": "2026-08-03",
+      "fecha_fin": "2026-09-02",
+      "id": "b7101d09-9b93-436a-9259-d6204387e8bf"
+    },
+    {
+      "policia_id": "jorge_bautista",
+      "tipo": "VA",
+      "fecha_inicio": "2026-08-03",
+      "fecha_fin": "2026-09-01",
+      "id": "65ac5e70-8690-423b-88a1-f05a78b9bc0d"
+    },
+    {
+      "policia_id": "juan_beltran",
+      "tipo": "VA",
+      "fecha_inicio": "2026-07-21",
+      "fecha_fin": "2026-08-23",
+      "id": "34b3d657-4e36-4fb7-917e-1cfe266b013e"
+    },
+    {
+      "policia_id": "sergio_cabrera",
+      "tipo": "VA",
+      "fecha_inicio": "2026-08-07",
+      "fecha_fin": "2026-08-23",
+      "id": "8fc77b7b-5fa2-4e51-9bd5-8df06d9cea3d"
+    },
+    {
+      "policia_id": "miguel_criado",
+      "tipo": "VA",
+      "fecha_inicio": "2026-08-03",
+      "fecha_fin": "2026-08-30",
+      "id": "ddddb516-b277-411e-8790-afa8902b8d3c"
+    },
+    {
+      "policia_id": "alejandro_cardenas",
+      "tipo": "VA",
+      "fecha_inicio": "2026-08-03",
+      "fecha_fin": "2026-09-01",
+      "id": "0f365edd-965c-4243-aca3-ce2a4c779768"
+    },
+    {
+      "policia_id": "mario_fernandez",
+      "tipo": "VA",
+      "fecha_inicio": "2026-08-03",
+      "fecha_fin": "2026-08-30",
+      "id": "c574d17e-55f6-4d93-8cb0-464768a45451"
+    },
+    {
+      "policia_id": "ivan_gamiz",
+      "tipo": "VA",
+      "fecha_inicio": "2026-08-13",
+      "fecha_fin": "2026-08-31",
+      "id": "22d8ff99-cc44-4a13-a735-a873d647a274"
+    },
+    {
+      "policia_id": "sarin_garcia",
+      "tipo": "VA",
+      "fecha_inicio": "2026-08-03",
+      "fecha_fin": "2026-09-01",
+      "id": "e59cbfb7-5d20-468d-b1b8-052c9396a176"
+    },
+    {
+      "policia_id": "diego_garcia",
+      "tipo": "VA",
+      "fecha_inicio": "2026-07-01",
+      "fecha_fin": "2026-07-12",
+      "id": "e75ad735-aee3-4874-aa20-e60988892ea5"
+    },
+    {
+      "policia_id": "diego_garcia",
+      "tipo": "VA",
+      "fecha_inicio": "2026-08-03",
+      "fecha_fin": "2026-08-24",
+      "id": "a0d1de37-1fde-4429-ad67-979aaf056499"
+    },
+    {
+      "policia_id": "jose_guardiola",
+      "tipo": "VA",
+      "fecha_inicio": "2026-08-03",
+      "fecha_fin": "2026-08-16",
+      "id": "6263d164-8b09-4fc7-b47f-33d8db08040d"
+    },
+    {
+      "policia_id": "jose_guardiola",
+      "tipo": "VA",
+      "fecha_inicio": "2026-09-04",
+      "fecha_fin": "2026-09-21",
+      "id": "e0f7d163-b2cc-42a7-b494-22983c9482fc"
+    },
+    {
+      "policia_id": "ignacio_gomez",
+      "tipo": "VA",
+      "fecha_inicio": "2026-08-20",
+      "fecha_fin": "2026-08-31",
+      "id": "0460f547-fd9d-4cff-bb44-7cdea7498fb5"
+    },
+    {
+      "policia_id": "ignacio_gomez",
+      "tipo": "VA",
+      "fecha_inicio": "2026-09-24",
+      "fecha_fin": "2026-10-05",
+      "id": "33502edf-2472-4258-98cd-0a1f644d76bb"
+    },
+    {
+      "policia_id": "salvador_jimenez",
+      "tipo": "VA",
+      "fecha_inicio": "2026-08-03",
+      "fecha_fin": "2026-09-06",
+      "id": "118b4935-44a7-4308-a22b-99b610ec26de"
+    },
+    {
+      "policia_id": "david_mancilla",
+      "tipo": "VA",
+      "fecha_inicio": "2026-08-04",
+      "fecha_fin": "2026-08-30",
+      "id": "d53c8587-a43a-4299-9950-135ded3ae906"
+    },
+    {
+      "policia_id": "pedro_marin",
+      "tipo": "VA",
+      "fecha_inicio": "2026-07-22",
+      "fecha_fin": "2026-08-02",
+      "id": "2e978ac1-4ba6-4cf9-8597-14ecb82557dc"
+    },
+    {
+      "policia_id": "pedro_marin",
+      "tipo": "VA",
+      "fecha_inicio": "2026-08-17",
+      "fecha_fin": "2026-08-30",
+      "id": "448d995b-a42c-486c-b704-0250fefa0b98"
+    },
+    {
+      "policia_id": "rafael_martin",
+      "tipo": "VA",
+      "fecha_inicio": "2026-08-03",
+      "fecha_fin": "2026-09-06",
+      "id": "96dc83aa-6e38-4883-aee8-8a372a63bf0a"
+    },
+    {
+      "policia_id": "francisco_martinez",
+      "tipo": "VA",
+      "fecha_inicio": "2026-08-03",
+      "fecha_fin": "2026-08-30",
+      "id": "5fc08bba-91ef-45ec-b0e1-0d1e06e94e4c"
+    },
+    {
+      "policia_id": "jose_molina",
+      "tipo": "VA",
+      "fecha_inicio": "2026-08-10",
+      "fecha_fin": "2026-08-30",
+      "id": "6dcfaeba-7291-46a4-9081-7fad9fe3f247"
+    },
+    {
+      "policia_id": "pablo_montalvo",
+      "tipo": "VA",
+      "fecha_inicio": "2026-07-13",
+      "fecha_fin": "2026-07-19",
+      "id": "0765000a-d299-49a0-9dfb-0bdf3fcf28cf"
+    },
+    {
+      "policia_id": "pablo_montalvo",
+      "tipo": "VA",
+      "fecha_inicio": "2026-08-17",
+      "fecha_fin": "2026-08-30",
+      "id": "e6dc775a-94d7-43f3-b9d2-c8a5980eba46"
+    },
+    {
+      "policia_id": "alejandro_mudarra",
+      "tipo": "VA",
+      "fecha_inicio": "2026-08-14",
+      "fecha_fin": "2026-08-31",
+      "id": "a5625f0a-53e8-4372-9967-4ab4cffd3e10"
+    },
+    {
+      "policia_id": "amador_perez",
+      "tipo": "VA",
+      "fecha_inicio": "2026-09-04",
+      "fecha_fin": "2026-09-13",
+      "id": "68374884-e537-49f0-b3c9-cf7d9842dd7c"
+    },
+    {
+      "policia_id": "alberto_perez",
+      "tipo": "VA",
+      "fecha_inicio": "2026-08-03",
+      "fecha_fin": "2026-08-30",
+      "id": "c35d099e-7133-45ca-8407-aa30bda47a9d"
+    },
+    {
+      "policia_id": "fran_perez",
+      "tipo": "VA",
+      "fecha_inicio": "2026-08-03",
+      "fecha_fin": "2026-08-30",
+      "id": "56bbced3-16a7-4da4-8921-91d37018dfb0"
+    },
+    {
+      "policia_id": "raul_perez",
+      "tipo": "VA",
+      "fecha_inicio": "2026-08-03",
+      "fecha_fin": "2026-08-31",
+      "id": "4597054a-1dfb-41f3-af3a-f2bb8372c8f4"
+    },
+    {
+      "policia_id": "jesus_romera",
+      "tipo": "VA",
+      "fecha_inicio": "2026-07-17",
+      "fecha_fin": "2026-08-02",
+      "id": "2e103674-c121-474f-a03a-f92a58008929"
+    },
+    {
+      "policia_id": "jesus_romera",
+      "tipo": "VA",
+      "fecha_inicio": "2026-08-14",
+      "fecha_fin": "2026-08-31",
+      "id": "4b5b4ece-9fed-4789-acab-3879c359555e"
+    },
+    {
+      "policia_id": "carlos_ruiz",
+      "tipo": "VA",
+      "fecha_inicio": "2026-08-06",
+      "fecha_fin": "2026-08-30",
+      "id": "2a93df2e-e188-4b7d-8ad8-58f7678bba84"
+    },
+    {
+      "policia_id": "carlos_ruiz",
+      "tipo": "VA",
+      "fecha_inicio": "2026-09-04",
+      "fecha_fin": "2026-09-14",
+      "id": "d28ef351-10e7-4409-b5e0-0a27ac4e28bf"
+    },
+    {
+      "policia_id": "manuel_salvador",
+      "tipo": "VA",
+      "fecha_inicio": "2026-07-20",
+      "fecha_fin": "2026-07-26",
+      "id": "afd1cda2-ae98-45a1-8b62-542878095552"
+    },
+    {
+      "policia_id": "manuel_salvador",
+      "tipo": "VA",
+      "fecha_inicio": "2026-08-05",
+      "fecha_fin": "2026-08-31",
+      "id": "32998f8a-7cd2-4a4c-ae81-0959d8f16593"
+    },
+    {
+      "policia_id": "david_sanchez",
+      "tipo": "VA",
+      "fecha_inicio": "2026-08-03",
+      "fecha_fin": "2026-08-30",
+      "id": "5477918c-1954-406b-9269-a64624116d4c"
+    },
+    {
+      "policia_id": "david_servi",
+      "tipo": "VA",
+      "fecha_inicio": "2026-08-03",
+      "fecha_fin": "2026-08-31",
+      "id": "64b12cab-2262-4fe9-9381-9c57010be738"
+    },
+    {
+      "policia_id": "francisco_sanchez",
+      "tipo": "VA",
+      "fecha_inicio": "2026-08-07",
+      "fecha_fin": "2026-09-06",
+      "id": "071a69a5-4595-418c-82f6-61587597b1fe"
+    },
+    {
+      "policia_id": "jose_tobaruela",
+      "tipo": "VA",
+      "fecha_inicio": "2026-08-03",
+      "fecha_fin": "2026-09-01",
+      "id": "99cea764-5441-431f-8a96-88faf9885993"
+    },
+    {
+      "policia_id": "manuel_tojo",
+      "tipo": "VA",
+      "fecha_inicio": "2026-08-17",
+      "fecha_fin": "2026-09-16",
+      "id": "67de9985-c579-462c-a638-26444baea06e"
+    },
+    {
+      "policia_id": "rafael_varela",
+      "tipo": "VA",
+      "fecha_inicio": "2026-08-03",
+      "fecha_fin": "2026-09-06",
+      "id": "18561661-437a-4670-9964-7d58fd916d90"
+    },
+    {
+      "policia_id": "roberto_villacreces",
+      "tipo": "VA",
+      "fecha_inicio": "2026-08-03",
+      "fecha_fin": "2026-08-30",
+      "id": "50ab50d5-76e3-4c6b-a94e-27f9d4751af8"
+    },
+    {
+      "policia_id": "rafael_villena",
+      "tipo": "VA",
+      "fecha_inicio": "2026-08-03",
+      "fecha_fin": "2026-09-03",
+      "id": "cfba5c47-2b59-415f-a071-a0732e7f8de0"
+    },
+    {
+      "policia_id": "victor_alvarez",
+      "tipo": "VA",
+      "fecha_inicio": "2026-08-17",
+      "fecha_fin": "2026-08-30",
+      "id": "27c75bc1-5e7f-42e3-8d64-bfe6873f2130"
+    },
+    {
+      "policia_id": "antonio_alvarez",
+      "tipo": "VA",
+      "fecha_inicio": "2026-07-20",
+      "fecha_fin": "2026-07-26",
+      "id": "349d952a-b78e-49f0-9f67-4b64ba12398c"
+    },
+    {
+      "policia_id": "antonio_alvarez",
+      "tipo": "VA",
+      "fecha_inicio": "2026-08-03",
+      "fecha_fin": "2026-08-09",
+      "id": "b14db2d9-d088-4b11-9903-5588eabd0c90"
+    },
+    {
+      "policia_id": "antonio_alvarez",
+      "tipo": "VA",
+      "fecha_inicio": "2026-08-13",
+      "fecha_fin": "2026-08-31",
+      "id": "d75293f5-a679-4151-a96f-bf083f4ae9d0"
+    },
+    {
+      "policia_id": "juan_santiago",
+      "tipo": "BJ",
+      "fecha_inicio": "2026-01-01",
+      "fecha_fin": "2099-12-31",
+      "id": "227a210c-788f-4e1f-8105-bfa3b0489dd8"
+    },
+    {
+      "policia_id": "jesus_romera",
+      "tipo": "BJ",
+      "fecha_inicio": "2026-01-01",
+      "fecha_fin": "2099-12-31",
+      "id": "b835c3ea-4695-41dc-9150-29c40358e6ac"
+    },
+    {
+      "policia_id": "roberto_villacreces",
+      "tipo": "AP",
+      "fecha_inicio": "2026-06-19",
+      "fecha_fin": "2026-06-21",
+      "id": "e5f57e50-97fe-4d44-be32-582cba3b15d7"
+    },
+    {
+      "policia_id": "antonio_alvarez",
+      "tipo": "AP",
+      "fecha_inicio": "2026-06-27",
+      "fecha_fin": "2026-06-30",
+      "id": "f45c5c7e-2f6f-4e66-abec-1db6b60f162c"
+    },
+    {
+      "policia_id": "jorge_bautista",
+      "tipo": "AP",
+      "fecha_inicio": "2026-06-16",
+      "fecha_fin": "2026-06-16",
+      "id": "b6ca1578-6dab-4d4e-a4ed-7e0b82ac9b7f"
+    },
+    {
+      "policia_id": "ivan_gamiz",
+      "tipo": "AP",
+      "fecha_inicio": "2026-06-20",
+      "fecha_fin": "2026-06-21",
+      "id": "136e98fa-b942-4f3b-b63f-a71f9150c73a"
+    },
+    {
+      "policia_id": "pedro_marin",
+      "tipo": "AP",
+      "fecha_inicio": "2026-06-26",
+      "fecha_fin": "2026-06-28",
+      "id": "86de5e64-e29b-4cfa-97ea-162a5dc9f475"
+    },
+    {
+      "policia_id": "manuel_salvador",
+      "tipo": "AP",
+      "fecha_inicio": "2026-06-18",
+      "fecha_fin": "2026-06-18",
+      "id": "31cbabf5-474b-4800-9560-7783a7668f7e"
+    },
+    {
+      "policia_id": "david_mancilla",
+      "tipo": "AP",
+      "fecha_inicio": "2026-06-19",
+      "fecha_fin": "2026-06-19",
+      "id": "a6b7c192-71f1-4e3c-9861-b00fb66384fb"
+    },
+    {
+      "policia_id": "ignacio_gomez",
+      "tipo": "AP",
+      "fecha_inicio": "2026-06-18",
+      "fecha_fin": "2026-06-18",
+      "id": "6083837f-7dc4-45e2-8ac7-49f6f986a965"
+    },
+    {
+      "policia_id": "ignacio_gomez",
+      "tipo": "AP",
+      "fecha_inicio": "2026-06-20",
+      "fecha_fin": "2026-06-21",
+      "id": "a92cd003-aca4-4830-a166-578218b52da3"
+    },
+    {
+      "policia_id": "rafael_villena",
+      "tipo": "AP",
+      "fecha_inicio": "2026-06-20",
+      "fecha_fin": "2026-06-20",
+      "id": "7b407cc0-3811-4bfa-9d81-aa85cbaf86ee"
+    },
+    {
+      "policia_id": "diego_garcia",
+      "tipo": "AP",
+      "fecha_inicio": "2026-06-21",
+      "fecha_fin": "2026-06-21",
+      "id": "bf55d389-2800-4733-97c1-debd03c683c4"
+    },
+    {
+      "policia_id": "francisco_martinez",
+      "tipo": "AP",
+      "fecha_inicio": "2026-06-20",
+      "fecha_fin": "2026-06-21",
+      "id": "d1776b2e-afe9-4cfa-a9be-4d7952d472fb"
+    },
+    {
+      "policia_id": "jose_arcos",
+      "tipo": "AP",
+      "fecha_inicio": "2026-06-21",
+      "fecha_fin": "2026-06-21",
+      "id": "d7aa246e-d326-4324-9e3f-02513f31faa2"
+    },
+    {
+      "policia_id": "carlos_ruiz",
+      "tipo": "AP",
+      "fecha_inicio": "2026-06-17",
+      "fecha_fin": "2026-06-18",
+      "id": "f04574af-e98c-46dd-8b5e-a6a4ae27a2bf"
+    },
+    {
+      "policia_id": "manuel_tojo",
+      "tipo": "AP",
+      "fecha_inicio": "2026-06-15",
+      "fecha_fin": "2026-06-15",
+      "id": "55fbfef5-97ee-43b4-8090-94082b2cdfb8"
+    },
+    {
+      "policia_id": "manuel_tojo",
+      "tipo": "AP",
+      "fecha_inicio": "2026-06-22",
+      "fecha_fin": "2026-06-22",
+      "id": "df7d01da-b64f-4237-ac46-f8056138b02f"
+    },
+    {
+      "policia_id": "raul_perez",
+      "tipo": "AP",
+      "fecha_inicio": "2026-07-02",
+      "fecha_fin": "2026-07-03",
+      "id": "f4add2d6-d83b-4ae4-a154-c52f1a65e0e2"
+    },
+    {
+      "policia_id": "raul_perez",
+      "tipo": "AP",
+      "fecha_inicio": "2026-07-18",
+      "fecha_fin": "2026-07-19",
+      "id": "02c79e04-f93b-47e4-a1d8-e7254bed8207"
+    },
+    {
+      "policia_id": "fran_perez",
+      "tipo": "VA",
+      "fecha_inicio": "2026-06-29",
+      "fecha_fin": "2026-07-03",
+      "id": "1aa5aa6e-aede-4b60-bd67-22b2f0d6ec1a"
+    }
+  ],
+  "comisiones_servicio": [
+    {
+      "id": "melilla_jun_jul",
+      "descripcion": "Comisión de servicio en Melilla",
+      "fecha_inicio": "2026-06-24",
+      "fecha_fin": "2026-07-09",
+      "quitan_de_comision": [
+        "pedro_marin",
+        "raul_perez",
+        "antonio_alvarez",
+        "jesus_romera",
+        "juan_santiago"
+      ],
+      "agregan_temporales": [
+        {
+          "id": "pablo_vazquez",
+          "nombre": "Pablo Vázquez Bueno",
+          "categoria": "Oficial",
+          "so": "54",
+          "equipo": "56"
+        },
+        {
+          "id": "enrique_capilla",
+          "nombre": "Enrique Capilla Martínez",
+          "categoria": "Policía",
+          "so": "57",
+          "equipo": "58"
+        },
+        {
+          "id": "jorge_moraleda",
+          "nombre": "Jorge Moraleda Moya",
+          "categoria": "Policía",
+          "so": "51",
+          "equipo": "52"
+        },
+        {
+          "id": "enrique_sanchez",
+          "nombre": "Enrique Sánchez Robles",
+          "categoria": "Policía",
+          "so": "51",
+          "equipo": "53"
+        },
+        {
+          "id": "marcos_corral",
+          "nombre": "Marcos Corral Carrillo",
+          "categoria": "Policía",
+          "so": "51",
+          "equipo": "53"
+        }
+      ],
+      "localidad": "Melilla",
+      "agregados": [
+        {
+          "id": "pablo_vazquez",
+          "nombre": "Pablo Vázquez Bueno",
+          "categoria": "Oficial",
+          "so": "54",
+          "equipo": "56"
+        },
+        {
+          "id": "enrique_capilla",
+          "nombre": "Enrique Capilla Martínez",
+          "categoria": "Policía",
+          "so": "57",
+          "equipo": "58"
+        },
+        {
+          "id": "jorge_moraleda",
+          "nombre": "Jorge Moraleda Moya",
+          "categoria": "Policía",
+          "so": "51",
+          "equipo": "52"
+        },
+        {
+          "id": "enrique_sanchez",
+          "nombre": "Enrique Sánchez Robles",
+          "categoria": "Policía",
+          "so": "51",
+          "equipo": "53"
+        },
+        {
+          "id": "marcos_corral",
+          "nombre": "Marcos Corral Carrillo",
+          "categoria": "Policía",
+          "so": "51",
+          "equipo": "53"
+        }
+      ],
+      "excluidos_manuales": [
+        "pedro_marin",
+        "raul_perez",
+        "antonio_alvarez",
+        "jesus_romera",
+        "juan_santiago"
+      ],
+      "observaciones": "- Primera noche en hotel Ánfora. \n- Los turnos coincidirán con el de SO. "
+    }
+  ]
+}
