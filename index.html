@@ -214,6 +214,9 @@
       };
 
       const diasBloque = obtenerDiasBloque(bloqueSeleccionado);
+      console.log('🔍 DEBUG: Total días generados:', diasBloque.length);
+      console.log('🔍 DEBUG: Último día:', diasBloque[diasBloque.length - 1]);
+      console.log('🔍 DEBUG: Penúltimo día:', diasBloque[diasBloque.length - 2]);
 
       // Obtener estado de un empleado en un día específico
       const obtenerEstadoEmpleado = (empleado, fecha) => {
@@ -1370,7 +1373,7 @@
                 </Typography>
               </Paper>
 
-              <Paper className="glass-card" sx={{ p: 2 }}>
+              <Paper className="glass-card" sx={{ p: 2, width: '100%', overflow: 'hidden' }}>
                 <Typography variant="subtitle1" fontWeight="600" mb={2}>
                   {(() => {
                     const fechaInicio = new Date(bloqueSeleccionado.inicio);
@@ -1381,8 +1384,8 @@
                     return `${meses} en el bloque ${selectedBloque}`;
                   })()}
                 </Typography>
-                <Box sx={{ overflowX: 'auto' }}>
-                  <Table size="small" sx={{ minWidth: 2500 }}>
+                <Box sx={{ overflowX: 'auto', width: '100%' }}>
+                  <Table size="small" sx={{ minWidth: 2800 }}>
                     <TableHead>
                       <TableRow>
                         <TableCell sx={{ fontWeight: 'bold', minWidth: 80 }}>Equipo</TableCell>
