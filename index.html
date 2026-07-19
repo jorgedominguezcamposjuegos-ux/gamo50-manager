@@ -198,17 +198,22 @@
       const obtenerDiasBloque = (bloque) => {
         const dias = [];
         const inicio = new Date(bloque.inicio);
+        console.log('🔍 DEBUG: Bloque inicio:', bloque.inicio, 'Bloque fin:', bloque.fin);
         for (let i = 0; i < 28; i++) {
           const fecha = new Date(inicio);
           fecha.setDate(fecha.getDate() + i);
           const year = fecha.getFullYear();
           const month = String(fecha.getMonth() + 1).padStart(2, '0');
           const day = String(fecha.getDate()).padStart(2, '0');
-          dias.push({
+          const diaInfo = {
             fecha: `${year}-${month}-${day}`,
             diaSemana: fecha.getDay(), // 0 = domingo, 1 = lunes, etc.
             diaMes: fecha.getDate()
-          });
+          };
+          dias.push(diaInfo);
+          if (i === 27) {
+            console.log('🔍 DEBUG: Último día generado (i=27):', diaInfo);
+          }
         }
         return dias;
       };
@@ -1385,7 +1390,7 @@
                   })()}
                 </Typography>
                 <Box sx={{ overflowX: 'auto', width: '100%' }}>
-                  <Table size="small" sx={{ minWidth: 2800 }}>
+                  <Table size="small" sx={{ minWidth: 3000 }}>
                     <TableHead>
                       <TableRow>
                         <TableCell sx={{ fontWeight: 'bold', minWidth: 80 }}>Equipo</TableCell>
