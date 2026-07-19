@@ -1374,7 +1374,7 @@
                 </Typography>
               </Paper>
 
-              <Paper className="glass-card" sx={{ p: 3 }}>
+              <Paper className="glass-card" sx={{ p: 2 }}>
                 <Typography variant="subtitle1" fontWeight="600" mb={2}>
                   {(() => {
                     const fechaInicio = new Date(bloqueSeleccionado.inicio);
@@ -1386,7 +1386,7 @@
                   })()}
                 </Typography>
                 <TableContainer sx={{ overflow: 'auto', maxHeight: '70vh', width: '100%' }}>
-                  <Table size="small" sx={{ minWidth: 2000 }} stickyHeader>
+                  <Table size="small" sx={{ minWidth: 2200, width: '100%' }}>
                     <TableHead>
                       <TableRow>
                         <TableCell sx={{ fontWeight: 'bold', minWidth: 80 }}>Equipo</TableCell>
@@ -1446,6 +1446,9 @@
                                 {diasBloque.map((dia, idx) => {
                                   const estado = obtenerEstadoEmpleado(empleado, dia.fecha);
                                   const color = obtenerColorEstado(estado);
+                                  if (idx === diasBloque.length - 1) {
+                                    console.log(`🎨 Renderizando body último día (${idx + 1}):`, dia, 'para empleado', empleado.nombre);
+                                  }
                                   return (
                                     <TableCell key={idx} sx={{ 
                                       padding: '2px 1px', 
