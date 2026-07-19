@@ -198,18 +198,22 @@
       const obtenerDiasBloque = (bloque) => {
         const dias = [];
         const inicio = new Date(bloque.inicio);
+        console.log('🔍 Generando días del bloque:', bloque.inicio, 'a', bloque.fin);
         for (let i = 0; i < 28; i++) {
           const fecha = new Date(inicio);
           fecha.setDate(fecha.getDate() + i);
           const year = fecha.getFullYear();
           const month = String(fecha.getMonth() + 1).padStart(2, '0');
           const day = String(fecha.getDate()).padStart(2, '0');
-          dias.push({
+          const diaInfo = {
             fecha: `${year}-${month}-${day}`,
             diaSemana: fecha.getDay(), // 0 = domingo, 1 = lunes, etc.
             diaMes: fecha.getDate()
-          });
+          };
+          dias.push(diaInfo);
+          console.log(`📅 Día ${i + 1}:`, diaInfo);
         }
+        console.log('✅ Total días generados:', dias.length);
         return dias;
       };
 
@@ -1381,8 +1385,8 @@
                     return `${meses} en el bloque ${selectedBloque}`;
                   })()}
                 </Typography>
-                <TableContainer sx={{ overflow: 'auto', maxHeight: '70vh' }}>
-                  <Table size="small" sx={{ minWidth: 1600 }} stickyHeader>
+                <TableContainer sx={{ overflow: 'auto', maxHeight: '70vh', width: '100%' }}>
+                  <Table size="small" sx={{ minWidth: 2000 }} stickyHeader>
                     <TableHead>
                       <TableRow>
                         <TableCell sx={{ fontWeight: 'bold', minWidth: 80 }}>Equipo</TableCell>
@@ -1391,6 +1395,7 @@
                         {diasBloque.map((dia, idx) => {
                           const today = new Date().toISOString().split('T')[0];
                           const isToday = dia.fecha === today;
+                          console.log(`🎨 Renderizando header día ${idx + 1}:`, dia);
                           return (
                             <TableCell key={idx} sx={{ 
                               fontWeight: 'bold', 
