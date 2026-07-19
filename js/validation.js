@@ -95,10 +95,12 @@ function checkPermisoQuotas(data, permiso) {
     const fechaIni = parseDate(permiso.fecha_inicio);
     const fechaFin = parseDate(permiso.fecha_fin);
     
-    // Buscar permisos solapados (excepto los exentos)
+    // Buscar permisos solapados (excepto los exentos y el permiso actual que se está editando)
     const permisosSolapados = data.permisos.filter(p => {
       if (exemptTypes.includes(p.tipo)) return false;
       if (!p.fecha_inicio || !p.fecha_fin) return false;
+      // Excluir el permiso actual si se está editando
+      if (permiso.id && p.id === permiso.id) return false;
       
       try {
         const pIni = parseDate(p.fecha_inicio);

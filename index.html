@@ -201,8 +201,11 @@
         for (let i = 0; i < 28; i++) {
           const fecha = new Date(inicio);
           fecha.setDate(fecha.getDate() + i);
+          const year = fecha.getFullYear();
+          const month = String(fecha.getMonth() + 1).padStart(2, '0');
+          const day = String(fecha.getDate()).padStart(2, '0');
           dias.push({
-            fecha: fecha.toISOString().split('T')[0],
+            fecha: `${year}-${month}-${day}`,
             diaSemana: fecha.getDay(), // 0 = domingo, 1 = lunes, etc.
             diaMes: fecha.getDate()
           });
@@ -1402,7 +1405,6 @@
                             </TableCell>
                           );
                         })}
-                        <TableCell sx={{ fontWeight: 'bold', minWidth: 60, textAlign: 'center' }}>Anotación</TableCell>
                       </TableRow>
                     </TableHead>
                     <TableBody>
@@ -1420,7 +1422,7 @@
                       .map(([equipo, empleados]) => (
                         <React.Fragment key={equipo}>
                           <TableRow className="table-header-eo">
-                            <TableCell colSpan={diasBloque.length + 4}>
+                            <TableCell colSpan={diasBloque.length + 3}>
                               <Typography variant="subtitle2" fontWeight="600" color="primary">
                                 Equipo {equipo} ({empleados.length} componentes)
                               </Typography>
@@ -1452,15 +1454,6 @@
                                     </TableCell>
                                   );
                                 })}
-                                <TableCell sx={{ padding: '4px' }}>
-                                  <TextField
-                                    size="small"
-                                    value={anotacionesBloque[`${selectedBloque}_${empleado.id}`] || ''}
-                                    onChange={(e) => guardarAnotacion(empleado.id, e.target.value)}
-                                    sx={{ width: 70 }}
-                                    inputProps={{ style: { fontSize: 11, padding: '4px' } }}
-                                  />
-                                </TableCell>
                               </TableRow>
                             ))}
                         </React.Fragment>
