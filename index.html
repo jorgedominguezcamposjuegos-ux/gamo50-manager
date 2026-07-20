@@ -161,6 +161,8 @@
       // Estado para Resumen Bloque
       const [selectedBloque, setSelectedBloque] = React.useState(325);
       const [anotacionesBloque, setAnotacionesBloque] = React.useState({});
+      const [dialogPermisoBloque, setDialogPermisoBloque] = React.useState(false);
+      const [bloqueFormData, setBloqueFormData] = React.useState({ id: '', policia_id: '', tipo: 'VA', fecha_inicio: '', fecha_fin: '' });
 
       // Estado para anotaciones de Integrantes G50
       const [anotacionesG50, setAnotacionesG50] = React.useState('');
@@ -513,6 +515,69 @@
           setCalendarFormData({ id: '', policia_id: consultaAgenteId, tipo: 'VA', fecha_inicio: dayStr, fecha_fin: dayStr });
         }
         setDialogPermisoCalendar(true);
+      };
+
+      const handleBloqueDayClick = (empleado, dayStr, currentPermiso) => {
+        if (currentPermiso && currentPermiso.tipo === 'CS') return;
+        if (currentPermiso) {
+          setBloqueFormData({ ...currentPermiso });
+        } else {
+          setBloqueFormData({ id: '', policia_id: empleado.id, tipo: 'VA', fecha_inicio: dayStr, fecha_fin: dayStr });
+        }
+        setDialogPermisoBloque(true);
+      };
+
+      const handleBloqueSubmit = async (e, force = false) => {
+        if (e) e.preventDefault();
+        try {
+          const warningResponse = checkPermisoQuotas(data, { ...bloqueFormData, force });
+          
+          if (warningResponse && !force) {
+            setConfirmDialog({
+              title: "Aviso de Reglas",
+              text: warningResponse.message,
+              onConfirm: () => { setConfirmDialog(null); handleBloqueSubmit(null, true); }
+            });
+            return;
+          }
+          
+          const db = window.firebaseDB;
+          const permisoData = {
+            policia_id: bloqueFormData.policia_id,
+            tipo: bloqueFormData.tipo,
+            fecha_inicio: bloqueFormData.fecha_inicio,
+            fecha_fin: bloqueFormData.fecha_fin,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+          };
+          
+          if (bloqueFormData.id) {
+            await db.collection('permisos').doc(bloqueFormData.id).update(permisoData);
+          } else {
+            permisoData.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+            await db.collection('permisos').add(permisoData);
+          }
+          
+          setSnackbar({ open: true, message: 'Permiso guardado', severity: 'success' });
+          setDialogPermisoBloque(false);
+          fetchData();
+        } catch (error) {
+          console.error('Error guardando permiso:', error);
+          setSnackbar({ open: true, message: 'Error guardando permiso', severity: 'error' });
+        }
+      };
+
+      const handleDeletePermisoBloque = async () => {
+        if (!window.confirm("¿Seguro que deseas eliminar este permiso?")) return;
+        try {
+          const db = window.firebaseDB;
+          await db.collection('permisos').doc(bloqueFormData.id).delete();
+          setSnackbar({ open: true, message: 'Permiso eliminado', severity: 'success' });
+          setDialogPermisoBloque(false);
+          fetchData();
+        } catch (error) {
+          console.error('Error eliminando permiso:', error);
+          setSnackbar({ open: true, message: 'Error eliminando permiso', severity: 'error' });
+        }
       };
 
       const handleCalendarSubmit = async (e, force = false) => {
@@ -1451,14 +1516,20 @@
                                   const estado = obtenerEstadoEmpleado(empleado, dia.fecha);
                                   const color = obtenerColorEstado(estado);
                                   return (
-                                    <TableCell key={idx} sx={{ 
-                                      padding: '2px 1px', 
-                                      textAlign: 'center',
-                                      backgroundColor: color,
-                                      color: color === 'transparent' ? 'inherit' : 'white',
-                                      fontWeight: color === 'transparent' ? 'normal' : 'bold',
-                                      fontSize: 9
-                                    }}>
+                                    <TableCell 
+                                      key={idx} 
+                                      sx={{ 
+                                        padding: '2px 1px', 
+                                        textAlign: 'center',
+                                        backgroundColor: color,
+                                        color: color === 'transparent' ? 'inherit' : 'white',
+                                        fontWeight: color === 'transparent' ? 'normal' : 'bold',
+                                        fontSize: 9,
+                                        cursor: estado?.tipo === 'CS' ? 'default' : 'pointer',
+                                        '&:hover': { opacity: estado?.tipo === 'CS' ? 1 : 0.8 }
+                                      }}
+                                      onClick={() => handleBloqueDayClick(empleado, dia.fecha, estado)}
+                                    >
                                       {estado ? estado.tipo : ''}
                                     </TableCell>
                                   );
@@ -1613,6 +1684,28 @@
                   {calendarFormData.id && <Button color="error" onClick={handleDeletePermisoCalendar}>Eliminar</Button>}
                   <Box flexGrow={1} />
                   <Button onClick={() => setDialogPermisoCalendar(false)}>Cancelar</Button>
+                  <Button type="submit" variant="contained" color="primary">Guardar</Button>
+                </DialogActions>
+              </form>
+            </Dialog>
+
+            <Dialog open={dialogPermisoBloque} onClose={() => setDialogPermisoBloque(false)}>
+              <form onSubmit={handleBloqueSubmit}>
+                <DialogTitle>{bloqueFormData.id ? 'Modificar Permiso' : 'Añadir Permiso en Resumen Bloque'}</DialogTitle>
+                <DialogContent>
+                  <FormControl fullWidth margin="dense" size="small" sx={{ mt: 2 }}>
+                    <InputLabel>Tipo de Permiso</InputLabel>
+                    <Select value={bloqueFormData.tipo} label="Tipo de Permiso" onChange={(e) => setBloqueFormData({...bloqueFormData, tipo: e.target.value})} required>
+                      <MenuItem value="AP">AP</MenuItem><MenuItem value="VA">VA</MenuItem><MenuItem value="AFG">AFG</MenuItem><MenuItem value="CH">CH</MenuItem><MenuItem value="CU">CU</MenuItem><MenuItem value="BJ">BJ</MenuItem><MenuItem value="PT">PT</MenuItem>
+                    </Select>
+                  </FormControl>
+                  <TextField fullWidth margin="dense" label="Fecha Inicio" type="date" InputLabelProps={{ shrink: true }} value={bloqueFormData.fecha_inicio} onChange={(e) => setBloqueFormData({...bloqueFormData, fecha_inicio: e.target.value})} required sx={{ mt: 2 }}/>
+                  <TextField fullWidth margin="dense" label="Fecha Fin" type="date" InputLabelProps={{ shrink: true }} value={bloqueFormData.fecha_fin} onChange={(e) => setBloqueFormData({...bloqueFormData, fecha_fin: e.target.value})} required sx={{ mt: 2 }}/>
+                </DialogContent>
+                <DialogActions>
+                  {bloqueFormData.id && <Button color="error" onClick={handleDeletePermisoBloque}>Eliminar</Button>}
+                  <Box flexGrow={1} />
+                  <Button onClick={() => setDialogPermisoBloque(false)}>Cancelar</Button>
                   <Button type="submit" variant="contained" color="primary">Guardar</Button>
                 </DialogActions>
               </form>
