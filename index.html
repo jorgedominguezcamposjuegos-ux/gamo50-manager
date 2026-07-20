@@ -181,10 +181,19 @@
           const fechaFin = new Date(fechaInicio);
           fechaFin.setDate(fechaFin.getDate() + 27);
           
+          // Generar fechas en formato YYYY-MM-DD usando zona horaria local
+          const inicioYear = fechaInicio.getFullYear();
+          const inicioMonth = String(fechaInicio.getMonth() + 1).padStart(2, '0');
+          const inicioDay = String(fechaInicio.getDate()).padStart(2, '0');
+          
+          const finYear = fechaFin.getFullYear();
+          const finMonth = String(fechaFin.getMonth() + 1).padStart(2, '0');
+          const finDay = String(fechaFin.getDate()).padStart(2, '0');
+          
           bloques.push({
             numero: numBloque,
-            inicio: fechaInicio.toISOString().split('T')[0],
-            fin: fechaFin.toISOString().split('T')[0],
+            inicio: `${inicioYear}-${inicioMonth}-${inicioDay}`,
+            fin: `${finYear}-${finMonth}-${finDay}`,
             label: `Bloque ${numBloque} (${fechaInicio.toLocaleDateString('es-ES')} - ${fechaFin.toLocaleDateString('es-ES')})`
           });
         }
@@ -198,30 +207,22 @@
       const obtenerDiasBloque = (bloque) => {
         const dias = [];
         const inicio = new Date(bloque.inicio);
-        console.log('🔍 DEBUG: Bloque inicio:', bloque.inicio, 'Bloque fin:', bloque.fin);
         for (let i = 0; i < 28; i++) {
           const fecha = new Date(inicio);
           fecha.setDate(fecha.getDate() + i);
           const year = fecha.getFullYear();
           const month = String(fecha.getMonth() + 1).padStart(2, '0');
           const day = String(fecha.getDate()).padStart(2, '0');
-          const diaInfo = {
+          dias.push({
             fecha: `${year}-${month}-${day}`,
             diaSemana: fecha.getDay(), // 0 = domingo, 1 = lunes, etc.
             diaMes: fecha.getDate()
-          };
-          dias.push(diaInfo);
-          if (i === 27) {
-            console.log('🔍 DEBUG: Último día generado (i=27):', diaInfo);
-          }
+          });
         }
         return dias;
       };
 
       const diasBloque = obtenerDiasBloque(bloqueSeleccionado);
-      console.log('🔍 DEBUG: Total días generados:', diasBloque.length);
-      console.log('🔍 DEBUG: Último día:', diasBloque[diasBloque.length - 1]);
-      console.log('🔍 DEBUG: Penúltimo día:', diasBloque[diasBloque.length - 2]);
 
       // Obtener estado de un empleado en un día específico
       const obtenerEstadoEmpleado = (empleado, fecha) => {
@@ -1378,7 +1379,7 @@
                 </Typography>
               </Paper>
 
-              <Paper className="glass-card" sx={{ p: 2, width: '100%', overflow: 'hidden' }}>
+              <Paper className="glass-card" sx={{ p: 2, width: '100%', overflow: 'visible' }}>
                 <Typography variant="subtitle1" fontWeight="600" mb={2}>
                   {(() => {
                     const fechaInicio = new Date(bloqueSeleccionado.inicio);
@@ -1389,8 +1390,8 @@
                     return `${meses} en el bloque ${selectedBloque}`;
                   })()}
                 </Typography>
-                <Box sx={{ overflowX: 'auto', width: '100%' }}>
-                  <Table size="small" sx={{ minWidth: 3000 }}>
+                <Box sx={{ overflowX: 'auto', width: '100%', maxWidth: '100%' }}>
+                  <Table size="small" sx={{ minWidth: 4000, width: '100%' }}>
                     <TableHead>
                       <TableRow>
                         <TableCell sx={{ fontWeight: 'bold', minWidth: 80 }}>Equipo</TableCell>
@@ -1402,7 +1403,7 @@
                           return (
                             <TableCell key={idx} sx={{ 
                               fontWeight: 'bold', 
-                              minWidth: 35, 
+                              minWidth: 40, 
                               textAlign: 'center', 
                               padding: '4px 1px',
                               backgroundColor: isToday ? '#ff9800' : '#1e3a8a',
