@@ -1703,9 +1703,8 @@
                   <TextField fullWidth margin="dense" label="Fecha Fin" type="date" InputLabelProps={{ shrink: true }} value={bloqueFormData.fecha_fin} onChange={(e) => setBloqueFormData({...bloqueFormData, fecha_fin: e.target.value})} required sx={{ mt: 2 }}/>
                 </DialogContent>
                 <DialogActions>
-                  {bloqueFormData.id && <Button color="error" onClick={handleDeletePermisoBloque}>Eliminar</Button>}
-                  <Box flexGrow={1} />
                   <Button onClick={() => setDialogPermisoBloque(false)}>Cancelar</Button>
+                  {bloqueFormData.id && <Button color="error" variant="outlined" onClick={(e) => { e.preventDefault(); handleDeletePermisoBloque(); }}>Eliminar Permiso Completo</Button>}
                   <Button type="submit" variant="contained" color="primary">Guardar</Button>
                 </DialogActions>
               </form>
