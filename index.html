@@ -234,7 +234,14 @@
           fecha >= p.fecha_inicio && 
           fecha <= p.fecha_fin
         );
-        if (permiso) return { id: permiso.id, tipo: permiso.tipo, esPermiso: true };
+        if (permiso) return { 
+          id: permiso.id, 
+          policia_id: permiso.policia_id,
+          tipo: permiso.tipo, 
+          fecha_inicio: permiso.fecha_inicio,
+          fecha_fin: permiso.fecha_fin,
+          esPermiso: true 
+        };
 
         // Verificar si está en comisión
         const comision = data.comisiones_servicio.find(c => 
