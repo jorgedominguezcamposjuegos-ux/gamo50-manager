@@ -1462,13 +1462,13 @@
                     return `${meses} en el bloque ${selectedBloque}`;
                   })()}
                 </Typography>
-                <Box sx={{ overflowX: 'auto', width: '100%', maxWidth: '100%' }}>
-                  <Table size="small" sx={{ minWidth: 4000, width: '100%' }}>
+                <Box sx={{ overflowX: 'auto', overflowY: 'auto', maxHeight: '70vh', width: '100%', maxWidth: '100%' }}>
+                  <Table size="small" sx={{ minWidth: 4000, width: '100%' }} stickyHeader>
                     <TableHead>
                       <TableRow>
-                        <TableCell sx={{ fontWeight: 'bold', minWidth: 80 }}>Equipo</TableCell>
-                        <TableCell sx={{ fontWeight: 'bold', minWidth: 70 }}>Categoría</TableCell>
-                        <TableCell sx={{ fontWeight: 'bold', minWidth: 150 }}>Nombre y Apellidos</TableCell>
+                        <TableCell sx={{ fontWeight: 'bold', minWidth: 80, position: 'sticky', left: 0, zIndex: 3, backgroundColor: '#1e3a8a', color: 'white', borderRight: '1px solid rgba(255,255,255,0.2)' }}>Equipo</TableCell>
+                        <TableCell sx={{ fontWeight: 'bold', minWidth: 70, position: 'sticky', left: 80, zIndex: 3, backgroundColor: '#1e3a8a', color: 'white', borderRight: '1px solid rgba(255,255,255,0.2)' }}>Categoría</TableCell>
+                        <TableCell sx={{ fontWeight: 'bold', minWidth: 150, position: 'sticky', left: 150, zIndex: 3, backgroundColor: '#1e3a8a', color: 'white', borderRight: '1px solid rgba(255,255,255,0.2)' }}>Nombre y Apellidos</TableCell>
                         {diasBloque.map((dia, idx) => {
                           const today = new Date().toISOString().split('T')[0];
                           const isToday = dia.fecha === today;
@@ -1503,7 +1503,7 @@
                       .map(([equipo, empleados]) => (
                         <React.Fragment key={equipo}>
                           <TableRow className="table-header-eo">
-                            <TableCell colSpan={diasBloque.length + 3}>
+                            <TableCell colSpan={diasBloque.length + 3} sx={{ position: 'sticky', left: 0, zIndex: 2, backgroundColor: '#f5f5f5', borderRight: '1px solid #e0e0e0' }}>
                               <Typography variant="subtitle2" fontWeight="600" color="primary">
                                 Equipo {equipo} ({empleados.length} componentes)
                               </Typography>
@@ -1516,9 +1516,9 @@
                             })
                             .map(empleado => (
                               <TableRow key={empleado.id}>
-                                <TableCell>{empleado.equipo}</TableCell>
-                                <TableCell>{empleado.categoria}</TableCell>
-                                <TableCell>{empleado.nombre}</TableCell>
+                                <TableCell sx={{ position: 'sticky', left: 0, zIndex: 2, backgroundColor: 'white', borderRight: '1px solid #e0e0e0' }}>{empleado.equipo}</TableCell>
+                                <TableCell sx={{ position: 'sticky', left: 80, zIndex: 2, backgroundColor: 'white', borderRight: '1px solid #e0e0e0' }}>{empleado.categoria}</TableCell>
+                                <TableCell sx={{ position: 'sticky', left: 150, zIndex: 2, backgroundColor: 'white', borderRight: '1px solid #e0e0e0' }}>{empleado.nombre}</TableCell>
                                 {diasBloque.map((dia, idx) => {
                                   const estado = obtenerEstadoEmpleado(empleado, dia.fecha);
                                   const color = obtenerColorEstado(estado);
