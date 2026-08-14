@@ -228,7 +228,7 @@
 
       // Obtener estado de un empleado en un día específico
       const obtenerEstadoEmpleado = (empleado, fecha) => {
-        // Verificar si tiene permiso
+        // Verificar si tiene permiso en esta fecha específica
         const permiso = data.permisos.find(p => 
           p.policia_id === empleado.id && 
           fecha >= p.fecha_inicio && 
@@ -242,6 +242,39 @@
           fecha_fin: permiso.fecha_fin,
           esPermiso: true 
         };
+
+        // Verificar si tiene algún permiso que se solape con alguna comisión
+        // Si tiene un permiso durante el período de una comisión, no asiste a la comisión en ningún día
+        const tienePermisoEnComision = data.comisiones_servicio.some(c => {
+          const fechaInicioComision = new Date(c.fecha_inicio);
+          const fechaFinComision = new Date(c.fecha_fin);
+          const fechaActual = new Date(fecha);
+          
+          // Verificar si la fecha actual está dentro del período de la comisión
+          if (fechaActual < fechaInicioComision || fechaActual > fechaFinComision) {
+            return false;
+          }
+          
+          // Verificar si el empleado está excluido manualmente de esta comisión
+          if (c.excluidos_manuales?.includes(empleado.id)) {
+            return false;
+          }
+          
+          // Verificar si tiene algún permiso que se solape con el período de la comisión
+          return data.permisos.some(p => {
+            if (p.policia_id !== empleado.id) return false;
+            const pIni = new Date(p.fecha_inicio);
+            const pFin = new Date(p.fecha_fin);
+            
+            // Verificar si el permiso se solapa con el período de la comisión
+            return !(pFin < fechaInicioComision || pIni > fechaFinComision);
+          });
+        });
+
+        // Si tiene permiso durante el período de la comisión, no mostrar comisión
+        if (tienePermisoEnComision) {
+          return null; // Disponible (no asiste a la comisión)
+        }
 
         // Verificar si está en comisión
         const comision = data.comisiones_servicio.find(c => 
@@ -268,6 +301,7 @@
           case 'AFG': return '#a855f7';
           case 'PT': return '#22c55e';
           case 'CS': return '#eab308';
+          case 'CSA': return '#06b6d4';
           case 'BJ': return '#ef4444';
           case 'BAJA': return '#6b7280';
           default: return '#ef4444';
@@ -395,7 +429,14 @@
           console.log('📦 Cargando permisos...');
           const permisosSnapshot = await db.collection('permisos').get();
           console.log('✅ Permisos snapshot:', permisosSnapshot.size, 'documentos');
-          const permisos = permisosSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+          let permisos = permisosSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+          
+          // Filtrar permisos eliminados (localStorage)
+          const eliminados = JSON.parse(localStorage.getItem('permisosEliminados') || '[]');
+          if (eliminados.length > 0) {
+            console.log('🗑️ Filtrando permisos eliminados:', eliminados);
+            permisos = permisos.filter(p => !eliminados.includes(p.id));
+          }
           
           // Fetch comisiones
           console.log('📦 Cargando comisiones...');
@@ -425,10 +466,19 @@
           try {
             const response = await fetch('data.json');
             const localData = await response.json();
-            console.log('✅ Datos cargados del archivo local:', { efectivos: localData.efectivos.length, permisos: localData.permisos.length, comisiones: localData.comisiones_servicio?.length || 0 });
+            let permisos = localData.permisos || [];
+            
+            // Filtrar permisos eliminados (localStorage)
+            const eliminados = JSON.parse(localStorage.getItem('permisosEliminados') || '[]');
+            if (eliminados.length > 0) {
+              console.log('🗑️ Filtrando permisos eliminados (local):', eliminados);
+              permisos = permisos.filter(p => !eliminados.includes(p.id));
+            }
+            
+            console.log('✅ Datos cargados del archivo local:', { efectivos: localData.efectivos.length, permisos: permisos.length, comisiones: localData.comisiones_servicio?.length || 0 });
             setData({ 
               efectivos: localData.efectivos, 
-              permisos: localData.permisos || [], 
+              permisos: permisos, 
               comisiones_servicio: localData.comisiones_servicio || [] 
             });
             setComisiones(localData.comisiones_servicio || []);
@@ -501,16 +551,42 @@
       };
 
       const handleDeletePermiso = async (id) => {
+        console.log('🗑️ Intentando eliminar permiso con ID:', id);
         if (!window.confirm("¿Seguro que deseas eliminar este permiso?")) return;
+        
         try {
-          const db = window.firebaseDB;
-          await db.collection('permisos').doc(id).delete();
-          setSnackbar({ open: true, message: 'Permiso eliminado', severity: 'success' });
-          fetchData();
+          // Guardar el ID eliminado en localStorage para persistencia
+          const eliminados = JSON.parse(localStorage.getItem('permisosEliminados') || '[]');
+          if (!eliminados.includes(id)) {
+            eliminados.push(id);
+            localStorage.setItem('permisosEliminados', JSON.stringify(eliminados));
+          }
+          
+          // Eliminar del estado local inmediatamente para que desaparezca de la UI
+          setData(prev => {
+            console.log('📊 Permisos antes de eliminar:', prev.permisos.length);
+            const nuevosPermisos = prev.permisos.filter(p => p.id !== id);
+            console.log('📊 Permisos después de eliminar:', nuevosPermisos.length);
+            return {
+              ...prev,
+              permisos: nuevosPermisos
+            };
+          });
+          
+          // Intentar eliminar de Firebase si está disponible
+          if (window.firebaseDB) {
+            const db = window.firebaseDB;
+            await db.collection('permisos').doc(id).delete();
+            setSnackbar({ open: true, message: 'Permiso eliminado', severity: 'success' });
+          } else {
+            setSnackbar({ open: true, message: 'Permiso eliminado localmente (Firebase no disponible)', severity: 'warning' });
+          }
+          
           if (disponibilidad) consultarDisponibilidad();
         } catch (error) {
           console.error('Error eliminando permiso:', error);
-          setSnackbar({ open: true, message: 'Error eliminando permiso', severity: 'error' });
+          setSnackbar({ open: true, message: 'Permiso eliminado localmente (error en Firebase)', severity: 'warning' });
+          // NO recargar datos - el permiso ya se eliminó de la UI local
         }
       };
 
@@ -1030,6 +1106,7 @@
             case 'PT': return '#22c55e';
             case 'AFG': return '#a855f7';
             case 'CS': return '#eab308';
+            case 'CSA': return '#06b6d4';
             case 'VA': return '#f97316';
             default: return '#ef4444';
           }
@@ -1123,7 +1200,7 @@
                       <FormControl fullWidth margin="normal">
                         <InputLabel>Tipo de Permiso</InputLabel>
                         <Select value={formData.tipo} label="Tipo de Permiso" onChange={(e) => setFormData({...formData, tipo: e.target.value})} required>
-                          <MenuItem value="AP">AP</MenuItem><MenuItem value="VA">VA</MenuItem><MenuItem value="AFG">AFG</MenuItem><MenuItem value="CH">CH</MenuItem><MenuItem value="CU">CU</MenuItem><MenuItem value="BJ">BJ</MenuItem><MenuItem value="PT">PT</MenuItem>
+                          <MenuItem value="AP">AP</MenuItem><MenuItem value="VA">VA</MenuItem><MenuItem value="AFG">AFG</MenuItem><MenuItem value="CH">CH</MenuItem><MenuItem value="CU">CU</MenuItem><MenuItem value="BJ">BJ</MenuItem><MenuItem value="PT">PT</MenuItem><MenuItem value="CSA">CSA (Comisión como agregado)</MenuItem>
                         </Select>
                       </FormControl>
                       <TextField fullWidth margin="normal" label="Fecha Inicio" type="date" InputLabelProps={{ shrink: true }} value={formData.fecha_inicio} onChange={(e) => setFormData({...formData, fecha_inicio: e.target.value})} required />
@@ -1422,6 +1499,7 @@
                       <Chip size="small" label="BJ/Otros" sx={{bgcolor: '#ef4444', color: 'white'}} />
                       <Chip size="small" label="PT" sx={{bgcolor: '#22c55e', color: 'white'}} />
                       <Chip size="small" label="Comisión" sx={{bgcolor: '#eab308', color: 'white'}} />
+                      <Chip size="small" label="CSA" sx={{bgcolor: '#06b6d4', color: 'white'}} />
                     </Box>
                   </Box>
                   {renderCalendar()}

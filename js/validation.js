@@ -86,7 +86,7 @@ function checkPermisoQuotas(data, permiso) {
   }
 
   // Tipos de permiso que no cuentan para las cuotas
-  const exemptTypes = ['AFG', 'BJ', 'CU', 'PT'];
+  const exemptTypes = ['AFG', 'BJ', 'CU', 'PT', 'CSA'];
   
   if (!exemptTypes.includes(permiso.tipo)) {
     if (!permiso.fecha_inicio || !permiso.fecha_fin) {
