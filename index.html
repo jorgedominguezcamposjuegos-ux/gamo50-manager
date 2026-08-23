@@ -19,6 +19,9 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
 
+  <!-- SheetJS for Excel Generation -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
   <!-- Firebase SDK (Compat version para evitar problemas CORS local) -->
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
@@ -977,98 +980,154 @@
         });
       }
 
-      const generarCuadrantePDF = () => {
+      const generarCuadranteExcel = () => {
         if (!selectedComObj) return;
-        const { jsPDF } = window.jspdf;
-        const doc = new jsPDF();
         
-        // Título principal centrado
-        doc.setFontSize(20);
-        doc.setFont('helvetica', 'bold');
-        doc.text('CUADRANTE DE COMISIÓN DE SERVICIO', 105, 20, { align: 'center' });
-        
-        // Línea separadora debajo del título
-        doc.setDrawColor(0, 0, 0);
-        doc.setLineWidth(0.5);
-        doc.line(14, 25, 196, 25);
-        
-        // Información de la comisión
-        doc.setFontSize(14);
-        doc.setFont('helvetica', 'bold');
-        doc.text(`Comisión: ${selectedComObj.localidad}`, 14, 38);
-        
-        doc.setFontSize(12);
-        doc.setFont('helvetica', 'normal');
-        doc.text(`Periodo: ${selectedComObj.fecha_inicio} al ${selectedComObj.fecha_fin}`, 14, 48);
-        doc.text(`Total Efectivos: ${totalGO}`, 14, 56);
+        // Obtener todos los efectivos de la comisión (incluyendo agregados)
+        const todos = Object.values(agrupadosPorEO).flat();
 
-        let currentY = 70;
+        // Identificar jefe de grupo (funcion: "Mando")
+        const jefeGrupo = todos.find(p => p.funcion === 'Mando');
+        
+        // Equipo de mando (SO = "EM")
+        const equipoMando = todos.filter(p => p.so === 'EM' && p.funcion !== 'Mando');
+        
+        // Resto de componentes (incluyendo JSO y agregados)
+        const componentes = todos.filter(p => p.so !== 'EM');
 
-        Object.keys(agrupadosPorEO).sort().forEach(eq => {
-          const nombreEq = eq.includes('Gamo') || eq.includes('EM') ? eq : `Equipo ${eq}`;
+        // Crear array para los datos del Excel
+        const datosExcel = [];
+
+        // Agregar información de la comisión
+        datosExcel.push(['INFORMACIÓN DE LA COMISIÓN']);
+        datosExcel.push(['Comisión:', selectedComObj.localidad]);
+        datosExcel.push(['Periodo:', `${selectedComObj.fecha_inicio} al ${selectedComObj.fecha_fin}`]);
+        datosExcel.push(['Total Efectivos:', totalGO]);
+        datosExcel.push([]); // Fila vacía
+
+        // Sección de EQUIPO DE MANDO (jefe de grupo + equipo de mando)
+        if (jefeGrupo || equipoMando.length > 0) {
+          datosExcel.push(['EQUIPO DE MANDO']);
+          datosExcel.push(['Nº', 'Nombre', 'Categoría', 'Función', 'SO', 'Equipo', 'Agregado']);
           
-          // Título del equipo
-          doc.setFontSize(14);
-          doc.setFont('helvetica', 'bold');
-          doc.text(`${nombreEq} (${agrupadosPorEO[eq].length} componentes)`, 14, currentY);
+          let numeroMando = 1;
           
-          const head = [['Nombre', 'Categoría', 'Origen']];
-          const body = agrupadosPorEO[eq].map(p => [
-            p.nombre + (p.esAgregado ? ' (Agregado)' : ''),
-            p.categoria,
-            p.esAgregado ? 'Externo' : `SO ${p.so}`
-          ]);
-
-          doc.autoTable({
-            startY: currentY + 6,
-            head: head,
-            body: body,
-            theme: 'grid',
-            headStyles: { 
-              fillColor: [30, 58, 138],
-              fontStyle: 'bold',
-              halign: 'center',
-              fontSize: 11,
-              textColor: 255
-            },
-            columnStyles: {
-              0: { cellWidth: 90 },
-              1: { cellWidth: 35, halign: 'center' },
-              2: { cellWidth: 45, halign: 'center' }
-            },
-            styles: {
-              fontSize: 10,
-              cellPadding: 4,
-              lineColor: [0, 0, 0],
-              lineWidth: 0.1
-            },
-            margin: { left: 14, right: 14 }
+          // Primero el jefe de grupo
+          if (jefeGrupo) {
+            datosExcel.push([
+              numeroMando++,
+              jefeGrupo.nombre,
+              jefeGrupo.categoria,
+              jefeGrupo.funcion,
+              jefeGrupo.so,
+              jefeGrupo.equipo,
+              jefeGrupo.esAgregado ? 'Sí' : 'No'
+            ]);
+          }
+          
+          // Luego el equipo de mando
+          equipoMando.forEach(componente => {
+            datosExcel.push([
+              numeroMando++,
+              componente.nombre,
+              componente.categoria,
+              componente.funcion,
+              componente.so,
+              componente.equipo,
+              componente.esAgregado ? 'Sí' : 'No'
+            ]);
           });
+          
+          datosExcel.push([]); // Fila vacía
+        }
 
-          currentY = doc.lastAutoTable.finalY + 18;
+        // Agrupar componentes por SO y luego por equipo
+        const agrupadosPorSO = {};
+        componentes.forEach(p => {
+          const so = p.so || 'Sin SO';
+          if (!agrupadosPorSO[so]) {
+            agrupadosPorSO[so] = {};
+          }
+          const equipo = p.equipo || 'Sin equipo';
+          if (!agrupadosPorSO[so][equipo]) {
+            agrupadosPorSO[so][equipo] = [];
+          }
+          agrupadosPorSO[so][equipo].push(p);
         });
 
-        // Observaciones
+        // Ordenar SO numéricamente
+        const soKeys = Object.keys(agrupadosPorSO).sort((a, b) => {
+          const numA = parseInt(a.replace(/\D/g, '')) || 999;
+          const numB = parseInt(b.replace(/\D/g, '')) || 999;
+          return numA - numB;
+        });
+
+        // Generar datos para cada SO con numeración por SO
+        soKeys.forEach(so => {
+          datosExcel.push([`SUBGRUPO OPERATIVO SO ${so}`]);
+          datosExcel.push(['Nº', 'Nombre', 'Categoría', 'Función', 'Equipo', 'Agregado']);
+          
+          let numeroSO = 1;
+          const equiposSO = agrupadosPorSO[so];
+          
+          // Ordenar equipos numéricamente dentro del SO
+          const equipoKeys = Object.keys(equiposSO).sort((a, b) => {
+            const numA = parseInt(a.replace(/\D/g, '')) || 999;
+            const numB = parseInt(b.replace(/\D/g, '')) || 999;
+            return numA - numB;
+          });
+
+          equipoKeys.forEach(equipo => {
+            const componentesEquipo = equiposSO[equipo];
+            
+            // Ordenar componentes: primero JSO, luego JEO, luego resto
+            componentesEquipo.sort((a, b) => {
+              if (a.funcion === 'JSO' && b.funcion !== 'JSO') return -1;
+              if (a.funcion !== 'JSO' && b.funcion === 'JSO') return 1;
+              if (a.funcion === 'JEO' && b.funcion !== 'JEO' && b.funcion !== 'JSO') return -1;
+              if (a.funcion !== 'JEO' && b.funcion === 'JEO' && a.funcion !== 'JSO') return 1;
+              return 0;
+            });
+
+            componentesEquipo.forEach(componente => {
+              datosExcel.push([
+                numeroSO++,
+                componente.nombre,
+                componente.categoria,
+                componente.funcion,
+                componente.equipo,
+                componente.esAgregado ? 'Sí' : 'No'
+              ]);
+            });
+          });
+          
+          datosExcel.push([]); // Fila vacía entre SO
+        });
+
+        // Agregar observaciones si existen
         if (observaciones) {
-          doc.setFontSize(14);
-          doc.setFont('helvetica', 'bold');
-          doc.text("Observaciones:", 14, currentY);
-          doc.setFontSize(11);
-          doc.setFont('helvetica', 'normal');
-          const splitObs = doc.splitTextToSize(observaciones, 180);
-          doc.text(splitObs, 14, currentY + 8);
+          datosExcel.push(['OBSERVACIONES']);
+          datosExcel.push([observaciones]);
         }
 
-        // Pie de página
-        const pageCount = doc.internal.getNumberOfPages();
-        for (let i = 1; i <= pageCount; i++) {
-          doc.setPage(i);
-          doc.setFontSize(9);
-          doc.setFont('helvetica', 'normal');
-          doc.text(`Página ${i} de ${pageCount}`, 105, 290, { align: 'center' });
-        }
+        // Crear libro de Excel
+        const wb = XLSX.utils.book_new();
+        const ws = XLSX.utils.aoa_to_sheet(datosExcel);
+        
+        // Ajustar ancho de columnas
+        ws['!cols'] = [
+          { wch: 5 },  // Nº
+          { wch: 30 }, // Nombre
+          { wch: 15 }, // Categoría
+          { wch: 15 }, // Función
+          { wch: 10 }, // Equipo
+          { wch: 10 }  // Agregado
+        ];
 
-        doc.save(`Cuadrante_Comision_${selectedComObj.localidad.replace(/\s+/g, '_')}.pdf`);
+        XLSX.utils.book_append_sheet(wb, ws, 'Cuadrante Comisión');
+        
+        // Generar y descargar archivo
+        XLSX.writeFile(wb, `Cuadrante_Comision_${selectedComObj.localidad.replace(/\s+/g, '_')}.xlsx`);
       };
 
       const renderCalendar = () => {
@@ -1334,8 +1393,8 @@
                   </Box>
                   
                   {selectedComObj && (
-                    <Button variant="contained" color="secondary" onClick={generarCuadrantePDF} disableElevation startIcon={<span className="material-icons">picture_as_pdf</span>}>
-                      Generar Cuadrante
+                    <Button variant="contained" color="secondary" onClick={generarCuadranteExcel} disableElevation startIcon={<span className="material-icons">table_chart</span>}>
+                      Generar Excel
                     </Button>
                   )}
                 </Box>
