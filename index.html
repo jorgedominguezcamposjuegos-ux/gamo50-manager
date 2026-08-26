@@ -628,27 +628,69 @@
           }
           
           const db = window.firebaseDB;
+          console.log('🔍 Datos del formulario:', bloqueFormData);
+          console.log('🔍 ID del permiso:', bloqueFormData.id);
+          
           const permisoData = {
             policia_id: bloqueFormData.policia_id,
             tipo: bloqueFormData.tipo,
             fecha_inicio: bloqueFormData.fecha_inicio,
-            fecha_fin: bloqueFormData.fecha_fin,
-            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            fecha_fin: bloqueFormData.fecha_fin
           };
           
           if (bloqueFormData.id) {
-            await db.collection('permisos').doc(bloqueFormData.id).update(permisoData);
+            console.log('🔄 Intentando actualizar permiso existente con ID:', bloqueFormData.id);
+            console.log('📝 Datos a actualizar:', permisoData);
+            
+            // Verificar que el ID sea válido
+            if (!bloqueFormData.id || typeof bloqueFormData.id !== 'string' || bloqueFormData.id.trim() === '') {
+              console.error('❌ ID del permiso inválido:', bloqueFormData.id);
+              throw new Error('ID del permiso inválido o vacío');
+            }
+            
+            try {
+              // Verificar si el documento existe antes de actualizar
+              const docRef = db.collection('permisos').doc(bloqueFormData.id);
+              const docSnapshot = await docRef.get();
+              
+              if (docSnapshot.exists) {
+                console.log('📄 Documento existe, procediendo a actualizar');
+                await docRef.update(permisoData);
+                console.log('✅ Permiso actualizado correctamente');
+              } else {
+                console.log('⚠️ Documento no existe, creando nuevo documento con el mismo ID');
+                permisoData.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+                await docRef.set(permisoData);
+                console.log('✅ Nuevo permiso creado con ID existente');
+              }
+            } catch (updateError) {
+              console.error('❌ Error específico en update/create:', updateError);
+              console.error('Código de error:', updateError.code);
+              console.error('Mensaje de error:', updateError.message);
+              throw updateError;
+            }
           } else {
+            console.log('➕ Creando nuevo permiso');
             permisoData.createdAt = firebase.firestore.FieldValue.serverTimestamp();
             await db.collection('permisos').add(permisoData);
+            console.log('✅ Nuevo permiso creado correctamente');
           }
           
           setSnackbar({ open: true, message: 'Permiso guardado', severity: 'success' });
           setDialogPermisoBloque(false);
           fetchData();
         } catch (error) {
-          console.error('Error guardando permiso:', error);
-          setSnackbar({ open: true, message: 'Error guardando permiso', severity: 'error' });
+          console.error('❌ Error guardando permiso:', error);
+          console.error('Detalles completos del error:', {
+            code: error.code,
+            message: error.message,
+            stack: error.stack
+          });
+          setSnackbar({ 
+            open: true, 
+            message: `Error guardando permiso: ${error.message || 'Error desconocido'}`, 
+            severity: 'error' 
+          });
         }
       };
 
@@ -681,27 +723,69 @@
           }
           
           const db = window.firebaseDB;
+          console.log('🔍 Datos del formulario calendario:', calendarFormData);
+          console.log('🔍 ID del permiso calendario:', calendarFormData.id);
+          
           const permisoData = {
             policia_id: calendarFormData.policia_id,
             tipo: calendarFormData.tipo,
             fecha_inicio: calendarFormData.fecha_inicio,
-            fecha_fin: calendarFormData.fecha_fin,
-            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            fecha_fin: calendarFormData.fecha_fin
           };
           
           if (calendarFormData.id) {
-            await db.collection('permisos').doc(calendarFormData.id).update(permisoData);
+            console.log('🔄 Intentando actualizar permiso existente con ID:', calendarFormData.id);
+            console.log('📝 Datos a actualizar:', permisoData);
+            
+            // Verificar que el ID sea válido
+            if (!calendarFormData.id || typeof calendarFormData.id !== 'string' || calendarFormData.id.trim() === '') {
+              console.error('❌ ID del permiso inválido:', calendarFormData.id);
+              throw new Error('ID del permiso inválido o vacío');
+            }
+            
+            try {
+              // Verificar si el documento existe antes de actualizar
+              const docRef = db.collection('permisos').doc(calendarFormData.id);
+              const docSnapshot = await docRef.get();
+              
+              if (docSnapshot.exists) {
+                console.log('📄 Documento existe, procediendo a actualizar');
+                await docRef.update(permisoData);
+                console.log('✅ Permiso actualizado correctamente');
+              } else {
+                console.log('⚠️ Documento no existe, creando nuevo documento con el mismo ID');
+                permisoData.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+                await docRef.set(permisoData);
+                console.log('✅ Nuevo permiso creado con ID existente');
+              }
+            } catch (updateError) {
+              console.error('❌ Error específico en update/create:', updateError);
+              console.error('Código de error:', updateError.code);
+              console.error('Mensaje de error:', updateError.message);
+              throw updateError;
+            }
           } else {
+            console.log('➕ Creando nuevo permiso');
             permisoData.createdAt = firebase.firestore.FieldValue.serverTimestamp();
             await db.collection('permisos').add(permisoData);
+            console.log('✅ Nuevo permiso creado correctamente');
           }
           
           setSnackbar({ open: true, message: 'Permiso guardado', severity: 'success' });
           setDialogPermisoCalendar(false);
           fetchData();
         } catch (error) {
-          console.error('Error guardando permiso:', error);
-          setSnackbar({ open: true, message: 'Error guardando permiso', severity: 'error' });
+          console.error('❌ Error guardando permiso:', error);
+          console.error('Detalles completos del error:', {
+            code: error.code,
+            message: error.message,
+            stack: error.stack
+          });
+          setSnackbar({ 
+            open: true, 
+            message: `Error guardando permiso: ${error.message || 'Error desconocido'}`, 
+            severity: 'error' 
+          });
         }
       };
 
