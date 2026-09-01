@@ -171,6 +171,19 @@
       const [anotacionesG50, setAnotacionesG50] = React.useState('');
       const [guardandoAnotacionG50, setGuardandoAnotacionG50] = React.useState(false);
 
+      // Estado para Servicios Bloque
+      const [selectedBloqueServicios, setSelectedBloqueServicios] = React.useState(325);
+      const [serviciosBloque, setServiciosBloque] = React.useState({});
+      const [dialogServicio, setDialogServicio] = React.useState(false);
+      const [servicioFormData, setServicioFormData] = React.useState({
+        id: '',
+        fecha: '',
+        servicio: '',
+        hora_inicio: '',
+        hora_fin: '',
+        personal: 1
+      });
+
       // Generar bloques de 28 días
       const generarBloques = () => {
         const bloques = [];
@@ -446,6 +459,15 @@
           const comisionesSnapshot = await db.collection('comisiones').get();
           console.log('✅ Comisiones snapshot:', comisionesSnapshot.size, 'documentos');
           const comisionesData = comisionesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+          // Fetch servicios de bloque para que estén disponibles en cualquier dispositivo
+          const serviciosSnapshot = await db.collection('servicios').get();
+          const serviciosFirebase = {};
+          serviciosSnapshot.docs.forEach(doc => {
+            const servicio = { id: doc.id, ...doc.data() };
+            if (!serviciosFirebase[servicio.fecha]) serviciosFirebase[servicio.fecha] = [];
+            serviciosFirebase[servicio.fecha].push(servicio);
+          });
           
           // Cargar anotaciones de G50 (manejar caso donde colección no existe)
           try {
@@ -460,6 +482,26 @@
           console.log('✅ Datos cargados desde Firebase:', { efectivos: efectivos.length, permisos: permisos.length, comisiones: comisionesData.length });
           setData({ efectivos, permisos, comisiones_servicio: comisionesData });
           setComisiones(comisionesData);
+          
+          // Usar Firebase como fuente compartida; conservar localStorage como respaldo/migración
+          const serviciosGuardados = localStorage.getItem('serviciosBloque');
+          const serviciosLocales = serviciosGuardados ? JSON.parse(serviciosGuardados) : {};
+          if (serviciosSnapshot.empty && Object.keys(serviciosLocales).length > 0) {
+            setServiciosBloque(serviciosLocales);
+            const migracion = db.batch();
+            Object.entries(serviciosLocales).forEach(([fecha, servicios]) => {
+              servicios.forEach(servicio => {
+                const servicioMigrado = { ...servicio, fecha: servicio.fecha || fecha };
+                const ref = db.collection('servicios').doc(servicioMigrado.id);
+                migracion.set(ref, { ...servicioMigrado, migratedAt: firebase.firestore.FieldValue.serverTimestamp() });
+              });
+            });
+            await migracion.commit();
+            console.log('✅ Servicios locales migrados a Firebase');
+          } else {
+            setServiciosBloque(serviciosFirebase);
+          }
+          
           setLoading(false);
         } catch (error) {
           console.error('❌ Error cargando datos desde Firebase:', error);
@@ -485,6 +527,13 @@
               comisiones_servicio: localData.comisiones_servicio || [] 
             });
             setComisiones(localData.comisiones_servicio || []);
+            
+            // Cargar servicios desde localStorage
+            const serviciosGuardados = localStorage.getItem('serviciosBloque');
+            if (serviciosGuardados) {
+              setServiciosBloque(JSON.parse(serviciosGuardados));
+            }
+            
             setSnackbar({ open: true, message: 'Datos cargados del archivo local (Firebase no disponible)', severity: 'warning' });
             setLoading(false);
           } catch (localError) {
@@ -1214,6 +1263,112 @@
         XLSX.writeFile(wb, `Cuadrante_Comision_${selectedComObj.localidad.replace(/\s+/g, '_')}.xlsx`);
       };
 
+      // Funciones para Servicios Bloque
+      const coloresServicios = ['#dbeafe', '#dcfce7', '#fef3c7', '#fce7f3', '#ede9fe', '#cffafe'];
+      const obtenerNivelServicio = (personal) => {
+        const cantidad = Number(personal) || 0;
+        if (cantidad <= 7) return { codigo: 'EO', nombre: 'Equipo operativo' };
+        if (cantidad <= 15) return { codigo: 'SO', nombre: 'Subgrupo operativo' };
+        if (cantidad <= 30) return { codigo: '2SOs', nombre: '2 Subgrupos operativos' };
+        return { codigo: 'GO', nombre: 'Grupo operativo' };
+      };
+
+      const abrirNuevoServicio = (fecha) => {
+        setServicioFormData({ id: '', fecha, servicio: '', hora_inicio: '', hora_fin: '', personal: 1 });
+        setDialogServicio(true);
+      };
+
+      const editarServicio = (fecha, servicio) => {
+        setServicioFormData({
+          id: servicio.id,
+          fecha,
+          servicio: servicio.servicio || '',
+          hora_inicio: servicio.hora_inicio || '',
+          hora_fin: servicio.hora_fin || '',
+          personal: Number(servicio.personal) || 1
+        });
+        setDialogServicio(true);
+      };
+
+      const handleGuardarServicio = () => {
+        if (!servicioFormData.servicio || !servicioFormData.hora_inicio) {
+          alert('Por favor, completa el servicio y la hora de inicio');
+          return;
+        }
+
+        const nuevoServicio = {
+          id: servicioFormData.id || `servicio_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          fecha: servicioFormData.fecha,
+          servicio: servicioFormData.servicio,
+          hora_inicio: servicioFormData.hora_inicio,
+          hora_fin: servicioFormData.hora_fin,
+          personal: servicioFormData.personal
+        };
+
+        const fecha = servicioFormData.fecha;
+        const serviciosActuales = serviciosBloque[fecha] || [];
+        
+        if (servicioFormData.id) {
+          // Editar servicio existente
+          const serviciosActualizados = serviciosActuales.map(s => 
+            s.id === servicioFormData.id ? nuevoServicio : s
+          );
+          setServiciosBloque(prev => ({
+            ...prev,
+            [fecha]: serviciosActualizados
+          }));
+        } else {
+          // Añadir nuevo servicio
+          setServiciosBloque(prev => ({
+            ...prev,
+            [fecha]: [...serviciosActuales, nuevoServicio]
+          }));
+        }
+
+        if (window.firebaseDB) {
+          window.firebaseDB.collection('servicios').doc(nuevoServicio.id).set({
+            ...nuevoServicio,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+          }).catch(error => console.error('Error guardando servicio en Firebase:', error));
+        }
+
+        // Guardar en localStorage
+        const serviciosPersistidos = {
+          ...serviciosBloque,
+          [fecha]: servicioFormData.id
+            ? serviciosActuales.map(s => s.id === servicioFormData.id ? nuevoServicio : s)
+            : [...serviciosActuales, nuevoServicio]
+        };
+        localStorage.setItem('serviciosBloque', JSON.stringify(serviciosPersistidos));
+
+        setDialogServicio(false);
+      };
+
+      const handleEliminarServicio = (servicioId) => {
+        if (!window.confirm('¿Seguro que deseas eliminar este servicio?')) return;
+        
+        const fecha = servicioFormData.fecha;
+        const serviciosFiltrados = (serviciosBloque[fecha] || []).filter(s => s.id !== servicioId);
+        
+        setServiciosBloque(prev => ({
+          ...prev,
+          [fecha]: serviciosFiltrados
+        }));
+
+        // Actualizar localStorage
+        localStorage.setItem('serviciosBloque', JSON.stringify({
+          ...serviciosBloque,
+          [fecha]: serviciosFiltrados
+        }));
+
+        if (window.firebaseDB) {
+          window.firebaseDB.collection('servicios').doc(servicioId).delete()
+            .catch(error => console.error('Error eliminando servicio de Firebase:', error));
+        }
+
+        setDialogServicio(false);
+      };
+
       const renderCalendar = () => {
         if (!consultaAgenteId || !consultaMes) return null;
         
@@ -1317,6 +1472,7 @@
                 <Tab label="Gestión en Comisión de Servicio" className="custom-tab" />
                 <Tab label="Consulta Individual" className="custom-tab" />
                 <Tab label="Resumen Bloque" className="custom-tab" />
+                <Tab label="Servicios Bloque" className="custom-tab" />
                 <Tab label="Integrantes G50" className="custom-tab" />
               </Tabs>
             </Paper>
@@ -1772,8 +1928,181 @@
               </Paper>
             </TabPanel>
 
-            {/* TAB 4: INTEGRANTES G50 */}
+            {/* TAB 4: SERVICIOS BLOQUE */}
             <TabPanel value={tabValue} index={4}>
+              {(() => {
+                const bloqueSeleccionadoServicios = bloques.find(b => b.numero === selectedBloqueServicios) || bloques[0];
+                const diasBloqueServicios = obtenerDiasBloque(bloqueSeleccionadoServicios);
+                
+                return (
+                  <>
+                    <Paper className="glass-card" sx={{ p: 3, mb: 3 }}>
+                      <Box display="flex" justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={2}>
+                        <Typography variant="h6" fontWeight="600">Servicios Bloque de 28 Días</Typography>
+                        <Box display="flex" gap={2} alignItems="center">
+                          <FormControl size="small" sx={{ minWidth: 250 }}>
+                            <InputLabel>Seleccionar Bloque</InputLabel>
+                            <Select value={selectedBloqueServicios} label="Seleccionar Bloque" onChange={(e) => setSelectedBloqueServicios(Number(e.target.value))}>
+                              {bloques.map(b => <MenuItem key={b.numero} value={b.numero}>{b.label}</MenuItem>)}
+                            </Select>
+                          </FormControl>
+                        </Box>
+                      </Box>
+                      <Typography variant="body2" color="text.secondary" mt={1}>
+                        Periodo: {bloqueSeleccionadoServicios.inicio} al {bloqueSeleccionadoServicios.fin}
+                      </Typography>
+                    </Paper>
+
+                    <Paper className="glass-card" sx={{ p: 2 }}>
+                      <Typography variant="subtitle1" fontWeight="600" mb={2}>
+                        {(() => {
+                          const fechaInicio = new Date(bloqueSeleccionadoServicios.inicio);
+                          const fechaFin = new Date(bloqueSeleccionadoServicios.fin);
+                          const mesInicio = fechaInicio.toLocaleString('es-ES', { month: 'long' }).charAt(0).toUpperCase() + fechaInicio.toLocaleString('es-ES', { month: 'long' }).slice(1);
+                          const mesFin = fechaFin.toLocaleString('es-ES', { month: 'long' }).charAt(0).toUpperCase() + fechaFin.toLocaleString('es-ES', { month: 'long' }).slice(1);
+                          const meses = mesInicio === mesFin ? mesInicio : `${mesInicio}-${mesFin}`;
+                          return `${meses} en el bloque ${selectedBloqueServicios}`;
+                        })()}
+                      </Typography>
+                      
+                      <Box sx={{ overflowX: 'auto' }}>
+                        <Grid container spacing={1}>
+                          {['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'].map(dia => (
+                            <Grid item xs={12/7} key={dia}>
+                              <Box textAlign="center" fontWeight="bold" py={1}>{dia}</Box>
+                            </Grid>
+                          ))}
+                          {diasBloqueServicios.map((dia, index) => {
+                            const serviciosDia = serviciosBloque[dia.fecha] || [];
+                            const diaNum = dia.diaMes;
+                            const nombreDia = ['DOMINGO', 'LUNES', 'MARTES', 'MIÉRCOLES', 'JUEVES', 'VIERNES', 'SÁBADO'][dia.diaSemana];
+                            return (
+                              <Grid item xs={12/7} key={dia.fecha}>
+                                <Box 
+                                  onClick={() => abrirNuevoServicio(dia.fecha)}
+                                  sx={{
+                                    minHeight: 120,
+                                    maxHeight: 230,
+                                    overflowY: 'auto',
+                                    border: '1px solid #e2e8f0', 
+                                    borderRadius: 1, 
+                                    p: 1,
+                                    cursor: 'pointer',
+                                    backgroundColor: serviciosDia.length > 0 ? '#e0f2fe' : '#fff',
+                                    '&:hover': { backgroundColor: serviciosDia.length > 0 ? '#bae6fd' : '#f8fafc' }
+                                  }}
+                                >
+                                  <Typography variant="caption" fontWeight="bold" sx={{ display: 'block' }}>{nombreDia}</Typography>
+                                  <Typography variant="body2" fontWeight="bold">{diaNum}</Typography>
+                                  <Typography variant="caption" sx={{ display: 'block', mt: 0.5, fontSize: 10 }}>
+                                    {dia.fecha.split('-').reverse().join('/')}
+                                  </Typography>
+                                  {serviciosDia.length > 0 && (
+                                    <Box sx={{ mt: 1 }}>
+                                      {serviciosDia.map((servicio, idx) => (
+                                        <Box key={servicio.id} sx={{
+                                          backgroundColor: coloresServicios[idx % coloresServicios.length],
+                                          borderRadius: 1,
+                                          borderLeft: '4px solid #1e3a8a',
+                                          px: 0.75,
+                                          py: 0.5,
+                                          mb: idx < serviciosDia.length - 1 ? 0.5 : 0,
+                                          pb: idx < serviciosDia.length - 1 ? 0.5 : 0,
+                                          borderBottom: idx < serviciosDia.length - 1 ? '1px dashed #ccc' : 'none'
+                                        }} onClick={(e) => { e.stopPropagation(); editarServicio(dia.fecha, servicio); }}>
+                                          <Typography variant="caption" sx={{ fontWeight: 'bold', fontSize: 9, display: 'block' }}>
+                                            {servicio.servicio}
+                                          </Typography>
+                                          <Typography variant="caption" sx={{ fontSize: 8, display: 'block' }}>
+                                            {servicio.hora_inicio}{servicio.hora_fin ? ` - ${servicio.hora_fin}` : ''}
+                                          </Typography>
+                                          <Typography variant="caption" sx={{ fontSize: 8, display: 'block', color: '#334155' }}>
+                                            {servicio.personal} componentes ({obtenerNivelServicio(servicio.personal).codigo} · {obtenerNivelServicio(servicio.personal).nombre})
+                                          </Typography>
+                                        </Box>
+                                      ))}
+                                    </Box>
+                                  )}
+                                </Box>
+                              </Grid>
+                            );
+                          })}
+                        </Grid>
+                      </Box>
+                    </Paper>
+
+                    {/* Modal para Servicios */}
+                    <Dialog open={dialogServicio} onClose={() => setDialogServicio(false)} maxWidth="sm" fullWidth>
+                      <DialogTitle>
+                        {servicioFormData.id ? 'Editar servicio' : 'Añadir servicio'} — {servicioFormData.fecha ? servicioFormData.fecha.split('-').reverse().join('/') : ''}
+                      </DialogTitle>
+                      <DialogContent>
+                        <TextField
+                          autoFocus
+                          margin="dense"
+                          label="Servicio"
+                          fullWidth
+                          variant="outlined"
+                          value={servicioFormData.servicio}
+                          onChange={(e) => setServicioFormData({...servicioFormData, servicio: e.target.value})}
+                          required
+                          sx={{ mt: 2 }}
+                        />
+                        <TextField
+                          margin="dense"
+                          label="Hora Inicio"
+                          type="time"
+                          fullWidth
+                          variant="outlined"
+                          InputLabelProps={{ shrink: true }}
+                          value={servicioFormData.hora_inicio}
+                          onChange={(e) => setServicioFormData({...servicioFormData, hora_inicio: e.target.value})}
+                          required
+                        />
+                        <TextField
+                          margin="dense"
+                          label="Hora Fin (opcional)"
+                          type="time"
+                          fullWidth
+                          variant="outlined"
+                          InputLabelProps={{ shrink: true }}
+                          value={servicioFormData.hora_fin}
+                          onChange={(e) => setServicioFormData({...servicioFormData, hora_fin: e.target.value})}
+                        />
+                        <FormControl fullWidth margin="dense">
+                          <InputLabel>Personal</InputLabel>
+                          <Select
+                            value={servicioFormData.personal}
+                            label="Personal"
+                            onChange={(e) => setServicioFormData({...servicioFormData, personal: parseInt(e.target.value)})}
+                          >
+                            {Array.from({length: 40}, (_, i) => i + 1).map(num => (
+                              <MenuItem key={num} value={num}>{num}</MenuItem>
+                            ))}
+                          </Select>
+                        </FormControl>
+                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                          {obtenerNivelServicio(servicioFormData.personal).codigo}: {obtenerNivelServicio(servicioFormData.personal).nombre} ({servicioFormData.personal} componentes)
+                        </Typography>
+                      </DialogContent>
+                      <DialogActions>
+                        {servicioFormData.id && (
+                          <Button onClick={() => handleEliminarServicio(servicioFormData.id)} color="error">
+                            Eliminar
+                          </Button>
+                        )}
+                        <Button onClick={() => setDialogServicio(false)}>Cancelar</Button>
+                        <Button onClick={handleGuardarServicio} variant="contained" color="primary">
+                          Guardar
+                        </Button>
+                      </DialogActions>
+                    </Dialog>
+                  </>
+                );
+              })()}
+            </TabPanel>
+            {/* TAB 5: INTEGRANTES G50 */}
+            <TabPanel value={tabValue} index={5}>
               <Paper className="glass-card" sx={{ p: 3 }}>
                 <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
                   <Typography variant="h6" fontWeight="600">Composición G50</Typography>

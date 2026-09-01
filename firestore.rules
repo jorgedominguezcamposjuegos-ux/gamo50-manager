@@ -19,6 +19,11 @@ service cloud.firestore {
       allow read: if true;
       allow write: if true;
     }
+
+    match /servicios/{document=**} {
+      allow read: if true;
+      allow write: if true;
+    }
     
     // Ejemplo de reglas para producción con autenticación:
     /*
