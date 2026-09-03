@@ -127,6 +127,18 @@
     }
     const OPCIONES_MESES = generarOpcionesMeses();
 
+    function formatearFecha(valor) {
+      if (!valor) return '';
+      if (typeof valor === 'string') {
+        const coincidencia = valor.match(/^(\d{4})-(\d{2})-(\d{2})/);
+        if (coincidencia) return `${coincidencia[3]}/${coincidencia[2]}/${coincidencia[1].slice(-2)}`;
+      }
+      if (valor.toDate) valor = valor.toDate();
+      const fecha = valor instanceof Date ? valor : new Date(valor);
+      if (Number.isNaN(fecha.getTime())) return String(valor);
+      return `${String(fecha.getDate()).padStart(2, '0')}/${String(fecha.getMonth() + 1).padStart(2, '0')}/${String(fecha.getFullYear()).slice(-2)}`;
+    }
+
     function App() {
       const [tabValue, setTabValue] = React.useState(0);
       const [data, setData] = React.useState(null);
@@ -148,7 +160,7 @@
       const [efectivosComision, setEfectivosComision] = React.useState(null);
       const [dialogNuevaComision, setDialogNuevaComision] = React.useState(false);
       const [newComision, setNewComision] = React.useState({ localidad: '', fecha_inicio: '', fecha_fin: '' });
-      const [newAgregado, setNewAgregado] = React.useState({ nombre: '', categoria: 'Policía', equipo: '' });
+      const [newAgregado, setNewAgregado] = React.useState({ nombre: '', categoria: 'Policía', origen: '', equipo: '' });
       const [observaciones, setObservaciones] = React.useState('');
       const [guardandoObs, setGuardandoObs] = React.useState(false);
 
@@ -212,7 +224,7 @@
             numero: numBloque,
             inicio: `${inicioYear}-${inicioMonth}-${inicioDay}`,
             fin: `${finYear}-${finMonth}-${finDay}`,
-            label: `Bloque ${numBloque} (${fechaInicio.toLocaleDateString('es-ES')} - ${fechaFin.toLocaleDateString('es-ES')})`
+            label: `Bloque ${numBloque} (${formatearFecha(fechaInicio)} - ${formatearFecha(fechaFin)})`
           });
         }
         return bloques;
@@ -242,14 +254,28 @@
 
       const diasBloque = obtenerDiasBloque(bloqueSeleccionado);
 
+      const fechaClave = (valor) => {
+        if (!valor) return '';
+        if (typeof valor === 'string') return valor.slice(0, 10);
+        if (valor.toDate) valor = valor.toDate();
+        if (valor instanceof Date && !Number.isNaN(valor.getTime())) {
+          const year = valor.getFullYear();
+          const month = String(valor.getMonth() + 1).padStart(2, '0');
+          const day = String(valor.getDate()).padStart(2, '0');
+          return `${year}-${month}-${day}`;
+        }
+        return String(valor).slice(0, 10);
+      };
+
       // Obtener estado de un empleado en un día específico
       const obtenerEstadoEmpleado = (empleado, fecha) => {
-        // Verificar si tiene permiso en esta fecha específica
-        const permiso = data.permisos.find(p => 
-          p.policia_id === empleado.id && 
-          fecha >= p.fecha_inicio && 
-          fecha <= p.fecha_fin
-        );
+        const fechaDia = fechaClave(fecha);
+        // Los permisos/situaciones administrativas tienen prioridad en su fecha concreta.
+        const permiso = data.permisos.find(p => {
+          const inicio = fechaClave(p.fecha_inicio);
+          const fin = fechaClave(p.fecha_fin);
+          return p.policia_id === empleado.id && fechaDia >= inicio && fechaDia <= fin;
+        });
         if (permiso) return { 
           id: permiso.id, 
           policia_id: permiso.policia_id,
@@ -259,50 +285,38 @@
           esPermiso: true 
         };
 
-        // Verificar si tiene algún permiso que se solape con alguna comisión
-        // Si tiene un permiso durante el período de una comisión, no asiste a la comisión en ningún día
-        const tienePermisoEnComision = data.comisiones_servicio.some(c => {
-          const fechaInicioComision = new Date(c.fecha_inicio);
-          const fechaFinComision = new Date(c.fecha_fin);
-          const fechaActual = new Date(fecha);
-          
-          // Verificar si la fecha actual está dentro del período de la comisión
-          if (fechaActual < fechaInicioComision || fechaActual > fechaFinComision) {
-            return false;
-          }
-          
-          // Verificar si el empleado está excluido manualmente de esta comisión
-          if (c.excluidos_manuales?.includes(empleado.id)) {
-            return false;
-          }
-          
-          // Verificar si tiene algún permiso que se solape con el período de la comisión
-          return data.permisos.some(p => {
-            if (p.policia_id !== empleado.id) return false;
-            const pIni = new Date(p.fecha_inicio);
-            const pFin = new Date(p.fecha_fin);
-            
-            // Verificar si el permiso se solapa con el período de la comisión
-            return !(pFin < fechaInicioComision || pIni > fechaFinComision);
-          });
-        });
-
-        // Si tiene permiso durante el período de la comisión, no mostrar comisión
-        if (tienePermisoEnComision) {
-          return null; // Disponible (no asiste a la comisión)
+        // Verificar si está activo
+        if (!isAgentActiveOnDate(empleado.nombre, new Date(`${fechaDia}T00:00:00`))) {
+          return { tipo: 'BAJA', esBaja: true };
         }
 
-        // Verificar si está en comisión
-        const comision = data.comisiones_servicio.find(c => 
-          fecha >= c.fecha_inicio && 
-          fecha <= c.fecha_fin && 
-          !c.excluidos_manuales?.includes(empleado.id)
-        );
-        if (comision) return { tipo: 'CS', localidad: comision.localidad, esComision: true };
-
-        // Verificar si está activo
-        if (!isAgentActiveOnDate(empleado.nombre, new Date(fecha))) {
-          return { tipo: 'BAJA', esBaja: true };
+        // Una comisión solo se muestra si el efectivo era elegible para todo su periodo.
+        const comision = data.comisiones_servicio.find(c => {
+          const inicio = fechaClave(c.fecha_inicio);
+          const fin = fechaClave(c.fecha_fin);
+          return fechaDia >= inicio && fechaDia <= fin && !c.excluidos_manuales?.includes(empleado.id);
+        });
+        if (comision) {
+          const inicioComision = fechaClave(comision.fecha_inicio);
+          const finComision = fechaClave(comision.fecha_fin);
+          const tieneSituacionSolapada = data.permisos.some(p => {
+            if (p.policia_id !== empleado.id) return false;
+            const inicioPermiso = fechaClave(p.fecha_inicio);
+            const finPermiso = fechaClave(p.fecha_fin);
+            return inicioPermiso <= finComision && finPermiso >= inicioComision;
+          });
+          let tieneBajaDuranteComision = false;
+          const cursor = new Date(`${inicioComision}T00:00:00`);
+          const finCursor = new Date(`${finComision}T00:00:00`);
+          while (cursor <= finCursor) {
+            if (!isAgentActiveOnDate(empleado.nombre, cursor)) {
+              tieneBajaDuranteComision = true;
+              break;
+            }
+            cursor.setDate(cursor.getDate() + 1);
+          }
+          if (tieneSituacionSolapada || tieneBajaDuranteComision) return null;
+          return { tipo: 'CS', localidad: comision.localidad, esComision: true };
         }
 
         return null; // Disponible o sin turno
@@ -341,10 +355,10 @@
         doc.text(`Resumen Bloque ${selectedBloque} - Gamo 50`, 14, 15);
         
         doc.setFontSize(10);
-        doc.text(`Periodo: ${bloqueSeleccionado.inicio} al ${bloqueSeleccionado.fin}`, 14, 22);
+        doc.text(`Periodo: ${formatearFecha(bloqueSeleccionado.inicio)} al ${formatearFecha(bloqueSeleccionado.fin)}`, 14, 22);
 
         // Preparar datos para la tabla
-        const head = [['Equipo', 'Categoría', 'Nombre', ...diasBloque.map(d => `${['D', 'L', 'M', 'X', 'J', 'V', 'S'][d.diaSemana]} ${d.diaMes}`), 'Anotación']];
+        const head = [['Gamo', 'Categoría', 'Nombre', ...diasBloque.map(d => `${['D', 'L', 'M', 'X', 'J', 'V', 'S'][d.diaSemana]} ${d.diaMes}`), 'Anotación']];
         
         const body = [];
         Object.entries(
@@ -359,7 +373,7 @@
         )
         .sort(([a], [b]) => a.localeCompare(b))
         .forEach(([equipo, empleados]) => {
-          body.push([`Equipo ${equipo} (${empleados.length})`, '', '', ...Array(diasBloque.length).fill(''), '']);
+          body.push([`${etiquetaGamo(equipo)} (${empleados.length})`, '', '', ...Array(diasBloque.length).fill(''), '']);
           empleados
             .sort((a, b) => {
               const catOrder = { 'Inspector': 0, 'Subinspector': 1, 'Oficial': 2, 'Policía': 3 };
@@ -977,20 +991,26 @@
         try {
           const db = window.firebaseDB;
           const comisionRef = db.collection('comisiones').doc(selectedComisionId);
+          const numeroDestino = Number(newAgregado.equipo);
+          const soDestino = numeroDestino === 50 ? 'EM'
+            : numeroDestino <= 53 ? '51'
+            : numeroDestino <= 56 ? '54'
+            : '57';
           
           const nuevoAgregado = {
             id: generateUUID(),
             nombre: newAgregado.nombre,
             categoria: newAgregado.categoria,
+            origen: newAgregado.origen,
             equipo: newAgregado.equipo,
-            so: 'AGREGADO'
+            so: soDestino
           };
           
           await comisionRef.update({
             agregados: firebase.firestore.FieldValue.arrayUnion(nuevoAgregado)
           });
           
-          setNewAgregado({ nombre: '', categoria: 'Policía', equipo: '' });
+          setNewAgregado({ nombre: '', categoria: 'Policía', origen: '', equipo: '' });
           fetchEfectivosComision(selectedComisionId);
           fetchData();
           setSnackbar({ open: true, message: 'Agregado añadido', severity: 'success' });
@@ -1007,8 +1027,12 @@
           const comisionRef = db.collection('comisiones').doc(selectedComisionId);
           
           if (componente.esAgregado) {
+            const comisionDoc = await comisionRef.get();
+            if (!comisionDoc.exists) throw new Error('La comisión ya no existe');
+            const agregadosActuales = comisionDoc.data().agregados || [];
+            const agregadosRestantes = agregadosActuales.filter(a => a.id !== componente.id);
             await comisionRef.update({
-              agregados: firebase.firestore.FieldValue.arrayRemove(componente)
+              agregados: agregadosRestantes
             });
           } else {
             await comisionRef.update({
@@ -1016,8 +1040,8 @@
             });
           }
           
-          fetchEfectivosComision(selectedComisionId);
-          fetchData();
+          await fetchEfectivosComision(selectedComisionId);
+          await fetchData();
           setSnackbar({ open: true, message: 'Componente eliminado de la comisión', severity: 'success' });
         } catch (error) {
           console.error('Error eliminando componente:', error);
@@ -1072,7 +1096,29 @@
       const equiposDisponibles = ['Todos', ...new Set(data.efectivos.map(p => p.equipo))].sort();
       const subgruposDisponibles = ['Todos', ...new Set(data.efectivos.map(p => p.so))].sort();
       const efectivosFiltradosForm = data.efectivos.filter(p => filtroEquipoFormulario === 'Todos' || p.equipo === filtroEquipoFormulario);
-      const disponiblesFiltrados = disponibilidad?.disponibles.filter(p => filtroSODisponibles === 'Todos' || p.so === filtroSODisponibles) || [];
+      const ordenCategoria = { 'Inspector': 0, 'Subinspector': 1, 'Oficial': 2, 'Policía': 3 };
+      const valorOrdenOrganico = (valor) => {
+        const texto = String(valor || '').trim().toUpperCase();
+        if (texto === 'EM' || texto === 'GAMO 50' || texto === '50') return 0;
+        const numero = Number(texto.replace(/\D/g, ''));
+        return Number.isFinite(numero) && numero > 0 ? numero : 9999;
+      };
+      const compararClavesOrganicas = (a, b) =>
+        valorOrdenOrganico(a) - valorOrdenOrganico(b) ||
+        String(a || '').localeCompare(String(b || ''), 'es', { numeric: true });
+      const etiquetaGamo = (valor) => {
+        const texto = String(valor || '').trim();
+        if (texto.toUpperCase() === 'EM' || texto === '50') return 'Gamo 50';
+        return texto.toUpperCase().startsWith('GAMO ') ? texto : `Gamo ${texto}`;
+      };
+      const compararOrdenOperativo = (a, b) =>
+        compararClavesOrganicas(a.so, b.so) ||
+        compararClavesOrganicas(a.equipo, b.equipo) ||
+        (ordenCategoria[a.categoria] ?? 99) - (ordenCategoria[b.categoria] ?? 99) ||
+        String(a.nombre || '').localeCompare(String(b.nombre || ''), 'es', { sensitivity: 'base' });
+      const disponiblesFiltrados = (disponibilidad?.disponibles
+        .filter(p => filtroSODisponibles === 'Todos' || p.so === filtroSODisponibles) || [])
+        .sort(compararOrdenOperativo);
       const targetIni = new Date(fechaConsultaInicio);
       const targetFin = new Date(fechaConsultaFin);
       const permisosFiltrados = data.permisos.filter(p => {
@@ -1082,6 +1128,11 @@
         const pFin = new Date(p.fecha_fin);
         const matchFecha = Math.max(targetIni, pIni) <= Math.min(targetFin, pFin);
         return matchSO && matchFecha;
+      }).sort((a, b) => {
+        const agenteA = data.efectivos.find(e => e.id === a.policia_id) || {};
+        const agenteB = data.efectivos.find(e => e.id === b.policia_id) || {};
+        return compararOrdenOperativo(agenteA, agenteB) ||
+          fechaClave(a.fecha_inicio).localeCompare(fechaClave(b.fecha_inicio));
       });
 
       const selectedComObj = comisiones.find(c => c.id === selectedComisionId);
@@ -1115,6 +1166,9 @@
 
       const generarCuadranteExcel = () => {
         if (!selectedComObj) return;
+        const origenEnExcel = (componente) => componente.esAgregado
+          ? (componente.origen || 'Origen no indicado')
+          : '';
         
         // Obtener todos los efectivos de la comisión (incluyendo agregados)
         const todos = Object.values(agrupadosPorEO).flat();
@@ -1123,7 +1177,7 @@
         const jefeGrupo = todos.find(p => p.funcion === 'Mando');
         
         // Equipo de mando (SO = "EM")
-        const equipoMando = todos.filter(p => p.so === 'EM' && p.funcion !== 'Mando');
+        const equipoMando = todos.filter(p => p.so === 'EM' && p.funcion !== 'Mando').sort(compararOrdenOperativo);
         
         // Resto de componentes (incluyendo JSO y agregados)
         const componentes = todos.filter(p => p.so !== 'EM');
@@ -1134,14 +1188,14 @@
         // Agregar información de la comisión
         datosExcel.push(['INFORMACIÓN DE LA COMISIÓN']);
         datosExcel.push(['Comisión:', selectedComObj.localidad]);
-        datosExcel.push(['Periodo:', `${selectedComObj.fecha_inicio} al ${selectedComObj.fecha_fin}`]);
+        datosExcel.push(['Periodo:', `${formatearFecha(selectedComObj.fecha_inicio)} al ${formatearFecha(selectedComObj.fecha_fin)}`]);
         datosExcel.push(['Total Efectivos:', totalGO]);
         datosExcel.push([]); // Fila vacía
 
         // Sección de EQUIPO DE MANDO (jefe de grupo + equipo de mando)
         if (jefeGrupo || equipoMando.length > 0) {
           datosExcel.push(['EQUIPO DE MANDO']);
-          datosExcel.push(['Nº', 'Nombre', 'Categoría', 'Función', 'SO', 'Equipo', 'Agregado']);
+          datosExcel.push(['Nº', 'Nombre', 'Categoría', 'Función', 'SO', 'Destino', 'Origen']);
           
           let numeroMando = 1;
           
@@ -1153,8 +1207,8 @@
               jefeGrupo.categoria,
               jefeGrupo.funcion,
               jefeGrupo.so,
-              jefeGrupo.equipo,
-              jefeGrupo.esAgregado ? 'Sí' : 'No'
+              etiquetaGamo(jefeGrupo.equipo),
+              origenEnExcel(jefeGrupo)
             ]);
           }
           
@@ -1166,8 +1220,8 @@
               componente.categoria,
               componente.funcion,
               componente.so,
-              componente.equipo,
-              componente.esAgregado ? 'Sí' : 'No'
+              etiquetaGamo(componente.equipo),
+              origenEnExcel(componente)
             ]);
           });
           
@@ -1188,39 +1242,23 @@
           agrupadosPorSO[so][equipo].push(p);
         });
 
-        // Ordenar SO numéricamente
-        const soKeys = Object.keys(agrupadosPorSO).sort((a, b) => {
-          const numA = parseInt(a.replace(/\D/g, '')) || 999;
-          const numB = parseInt(b.replace(/\D/g, '')) || 999;
-          return numA - numB;
-        });
+        // Aplicar el mismo orden orgánico de Integrantes G50
+        const soKeys = Object.keys(agrupadosPorSO).sort(compararClavesOrganicas);
 
         // Generar datos para cada SO con numeración por SO
         soKeys.forEach(so => {
           datosExcel.push([`SUBGRUPO OPERATIVO SO ${so}`]);
-          datosExcel.push(['Nº', 'Nombre', 'Categoría', 'Función', 'Equipo', 'Agregado']);
+          datosExcel.push(['Nº', 'Nombre', 'Categoría', 'Función', 'Destino', 'Origen']);
           
           let numeroSO = 1;
           const equiposSO = agrupadosPorSO[so];
           
-          // Ordenar equipos numéricamente dentro del SO
-          const equipoKeys = Object.keys(equiposSO).sort((a, b) => {
-            const numA = parseInt(a.replace(/\D/g, '')) || 999;
-            const numB = parseInt(b.replace(/\D/g, '')) || 999;
-            return numA - numB;
-          });
+          const equipoKeys = Object.keys(equiposSO).sort(compararClavesOrganicas);
 
           equipoKeys.forEach(equipo => {
             const componentesEquipo = equiposSO[equipo];
             
-            // Ordenar componentes: primero JSO, luego JEO, luego resto
-            componentesEquipo.sort((a, b) => {
-              if (a.funcion === 'JSO' && b.funcion !== 'JSO') return -1;
-              if (a.funcion !== 'JSO' && b.funcion === 'JSO') return 1;
-              if (a.funcion === 'JEO' && b.funcion !== 'JEO' && b.funcion !== 'JSO') return -1;
-              if (a.funcion !== 'JEO' && b.funcion === 'JEO' && a.funcion !== 'JSO') return 1;
-              return 0;
-            });
+            componentesEquipo.sort(compararOrdenOperativo);
 
             componentesEquipo.forEach(componente => {
               datosExcel.push([
@@ -1228,8 +1266,8 @@
                 componente.nombre,
                 componente.categoria,
                 componente.funcion,
-                componente.equipo,
-                componente.esAgregado ? 'Sí' : 'No'
+                etiquetaGamo(componente.equipo),
+                origenEnExcel(componente)
               ]);
             });
           });
@@ -1254,7 +1292,7 @@
           { wch: 15 }, // Categoría
           { wch: 15 }, // Función
           { wch: 10 }, // Equipo
-          { wch: 10 }  // Agregado
+          { wch: 18 }  // Origen
         ];
 
         XLSX.utils.book_append_sheet(wb, ws, 'Cuadrante Comisión');
@@ -1390,13 +1428,10 @@
           days.push(dStr);
         }
 
-        const getDayStatus = (dStr) => {
-          const p = data.permisos.find(p => p.policia_id === consultaAgenteId && dStr >= p.fecha_inicio && dStr <= p.fecha_fin);
-          if (p) return p;
-          const c = comisiones.find(c => dStr >= c.fecha_inicio && dStr <= c.fecha_fin && !c.excluidos_manuales?.includes(consultaAgenteId));
-          if (c) return { tipo: 'CS', localidad: c.localidad };
-          return null;
-        };
+        const empleadoConsulta = data.efectivos.find(e => e.id === consultaAgenteId);
+        const getDayStatus = (dStr) => empleadoConsulta
+          ? obtenerEstadoEmpleado(empleadoConsulta, dStr)
+          : null;
 
         const getBgColor = (tipo) => {
           switch(tipo) {
@@ -1493,7 +1528,7 @@
                       <FormControl fullWidth margin="normal">
                         <InputLabel>Agente</InputLabel>
                         <Select value={formData.policia_id} label="Agente" onChange={(e) => setFormData({...formData, policia_id: e.target.value})} required>
-                          {efectivosFiltradosForm.map(p => <MenuItem key={p.id} value={p.id}>{p.nombre} (SO {p.so} - Eq {p.equipo})</MenuItem>)}
+                          {efectivosFiltradosForm.map(p => <MenuItem key={p.id} value={p.id}>{p.nombre} (SO {p.so} - {etiquetaGamo(p.equipo)})</MenuItem>)}
                         </Select>
                       </FormControl>
                       <FormControl fullWidth margin="normal">
@@ -1502,8 +1537,8 @@
                           <MenuItem value="AP">AP</MenuItem><MenuItem value="VA">VA</MenuItem><MenuItem value="AFG">AFG</MenuItem><MenuItem value="CH">CH</MenuItem><MenuItem value="CU">CU</MenuItem><MenuItem value="BJ">BJ</MenuItem><MenuItem value="PT">PT</MenuItem><MenuItem value="CSA">CSA (Comisión como agregado)</MenuItem>
                         </Select>
                       </FormControl>
-                      <TextField fullWidth margin="normal" label="Fecha Inicio" type="date" InputLabelProps={{ shrink: true }} value={formData.fecha_inicio} onChange={(e) => setFormData({...formData, fecha_inicio: e.target.value})} required />
-                      <TextField fullWidth margin="normal" label="Fecha Fin" type="date" InputLabelProps={{ shrink: true }} value={formData.fecha_fin} onChange={(e) => setFormData({...formData, fecha_fin: e.target.value})} required />
+                      <TextField fullWidth margin="normal" label="Fecha Inicio" type="date" InputLabelProps={{ shrink: true }} inputProps={{ lang: 'es-ES' }} value={formData.fecha_inicio} onChange={(e) => setFormData({...formData, fecha_inicio: e.target.value})} required />
+                      <TextField fullWidth margin="normal" label="Fecha Fin" type="date" InputLabelProps={{ shrink: true }} inputProps={{ lang: 'es-ES' }} value={formData.fecha_fin} onChange={(e) => setFormData({...formData, fecha_fin: e.target.value})} required />
                       <Button type="submit" variant="contained" fullWidth sx={{ mt: 3, py: 1.5 }} disableElevation>Registrar Permiso</Button>
                     </form>
                   </Paper>
@@ -1514,8 +1549,8 @@
                     <Box display="flex" justifyContent="space-between" alignItems="center" mb={3} gap={2} flexWrap="wrap">
                       <Typography variant="h6" fontWeight="600">Disponibilidad de Efectivos en Base</Typography>
                       <Box display="flex" gap={1}>
-                        <TextField label="Desde" type="date" InputLabelProps={{ shrink: true }} size="small" value={fechaConsultaInicio} onChange={(e) => setFechaConsultaInicio(e.target.value)} />
-                        <TextField label="Hasta" type="date" InputLabelProps={{ shrink: true }} size="small" value={fechaConsultaFin} onChange={(e) => setFechaConsultaFin(e.target.value)} />
+                        <TextField label="Desde" type="date" InputLabelProps={{ shrink: true }} inputProps={{ lang: 'es-ES' }} size="small" value={fechaConsultaInicio} onChange={(e) => setFechaConsultaInicio(e.target.value)} />
+                        <TextField label="Hasta" type="date" InputLabelProps={{ shrink: true }} inputProps={{ lang: 'es-ES' }} size="small" value={fechaConsultaFin} onChange={(e) => setFechaConsultaFin(e.target.value)} />
                         <Button variant="contained" onClick={consultarDisponibilidad} disableElevation>Consultar</Button>
                       </Box>
                     </Box>
@@ -1546,7 +1581,7 @@
                                 <TableRow key={p.id}>
                                   <TableCell>{p.nombre}</TableCell>
                                   <TableCell>{p.categoria} {p.en_funciones && <Chip label="En func." size="small" sx={{ml:1, fontSize:'0.65rem'}}/>}</TableCell>
-                                  <TableCell>SO {p.so} - Eq {p.equipo}</TableCell>
+                                  <TableCell>SO {p.so} - {etiquetaGamo(p.equipo)}</TableCell>
                                 </TableRow>
                               ))}
                             </TableBody>
@@ -1563,7 +1598,7 @@
               <Box mt={4}>
                 <Paper className="glass-card" sx={{ p: 3 }}>
                   <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
-                    <Typography variant="h6" fontWeight="600">Permisos y Bajas en el periodo: {fechaConsultaInicio} al {fechaConsultaFin}</Typography>
+                    <Typography variant="h6" fontWeight="600">Permisos y Bajas en el periodo: {formatearFecha(fechaConsultaInicio)} al {formatearFecha(fechaConsultaFin)}</Typography>
                     <FormControl size="small" sx={{ minWidth: 150 }}>
                       <InputLabel>Filtrar SO</InputLabel>
                       <Select value={filtroSOPermisos} label="Filtrar SO" onChange={(e) => setFiltroSOPermisos(e.target.value)}>
@@ -1580,9 +1615,9 @@
                           return (
                             <TableRow key={p.id || i}>
                               <TableCell>{agente.nombre || p.policia_id}</TableCell>
-                              <TableCell>SO {agente.so} - Eq {agente.equipo}</TableCell>
+                              <TableCell>SO {agente.so} - {etiquetaGamo(agente.equipo)}</TableCell>
                               <TableCell><Chip label={p.tipo} size="small" color={p.tipo==='BJ'?'error':'default'} /></TableCell>
-                              <TableCell>{p.fecha_inicio}</TableCell><TableCell>{p.fecha_fin}</TableCell>
+                              <TableCell>{formatearFecha(p.fecha_inicio)}</TableCell><TableCell>{formatearFecha(p.fecha_fin)}</TableCell>
                               <TableCell align="center">
                                 <IconButton size="small" color="error" onClick={() => handleDeletePermiso(p.id)}>
                                   <span className="material-icons" style={{fontSize: 20}}>delete</span>
@@ -1610,7 +1645,7 @@
                         {comisiones.map(c => (
                           <MenuItem key={c.id} value={c.id}>
                             <Box display="flex" justifyContent="space-between" alignItems="center" width="100%">
-                              <span>Comisión {c.localidad} ({c.fecha_inicio} al {c.fecha_fin})</span>
+                              <span>Comisión {c.localidad} ({formatearFecha(c.fecha_inicio)} al {formatearFecha(c.fecha_fin)})</span>
                               <IconButton 
                                 size="small" 
                                 color="error" 
@@ -1650,7 +1685,7 @@
                       <Divider sx={{ my: 1 }} />
                       
                       <Typography variant="subtitle2" mt={2} mb={1} color="text.secondary">Desglose por SO:</Typography>
-                      {Object.keys(totalSO).sort().map(so => (
+                      {Object.keys(totalSO).sort(compararClavesOrganicas).map(so => (
                         <Box display="flex" justifyContent="space-between" key={so}>
                           <Typography variant="body2">Subgrupo {so}:</Typography>
                           <Typography variant="body2" fontWeight="600">{totalSO[so]}</Typography>
@@ -1674,7 +1709,23 @@
                             <MenuItem value="Inspector">Inspector</MenuItem><MenuItem value="Subinspector">Subinspector</MenuItem><MenuItem value="Oficial">Oficial</MenuItem><MenuItem value="Policía">Policía</MenuItem>
                           </Select>
                         </FormControl>
-                        <TextField fullWidth margin="normal" label="Destino (Ej: Gamo 56)" value={newAgregado.equipo} onChange={(e)=>setNewAgregado({...newAgregado, equipo: e.target.value})} required size="small"/>
+                        <FormControl fullWidth margin="normal" size="small">
+                          <InputLabel>Origen</InputLabel>
+                          <Select value={newAgregado.origen} label="Origen" onChange={(e)=>setNewAgregado({...newAgregado, origen: e.target.value})} required>
+                            <MenuItem value="Gamo 10">Gamo 10</MenuItem>
+                            <MenuItem value="Gamo 20">Gamo 20</MenuItem>
+                            <MenuItem value="Gamo 30">Gamo 30</MenuItem>
+                            <MenuItem value="Gamo 40">Gamo 40</MenuItem>
+                          </Select>
+                        </FormControl>
+                        <FormControl fullWidth margin="normal" size="small">
+                          <InputLabel>Destino</InputLabel>
+                          <Select value={newAgregado.equipo} label="Destino" onChange={(e)=>setNewAgregado({...newAgregado, equipo: e.target.value})} required>
+                            {Array.from({ length: 10 }, (_, i) => String(i + 50)).map(gamo => (
+                              <MenuItem key={gamo} value={gamo}>{`Gamo ${gamo}`}</MenuItem>
+                            ))}
+                          </Select>
+                        </FormControl>
                         <Button type="submit" variant="outlined" fullWidth sx={{ mt: 2 }} disableElevation>Añadir a la Comisión</Button>
                       </form>
                     </Paper>
@@ -1715,23 +1766,23 @@
                             </TableRow>
                           </TableHead>
                           <TableBody>
-                            {Object.keys(agrupadosPorEO).sort().map(eq => (
+                            {Object.keys(agrupadosPorEO).sort(compararClavesOrganicas).map(eq => (
                               <React.Fragment key={eq}>
                                 <TableRow className="table-header-eo">
                                   <TableCell colSpan={4}>
                                     <Typography variant="subtitle2" fontWeight="600" color="primary">
-                                      {eq.includes('Gamo') || eq.includes('EM') ? eq : `Equipo ${eq}`} (Total: {agrupadosPorEO[eq].length} componentes)
+                                      {etiquetaGamo(eq)} (Total: {agrupadosPorEO[eq].length} componentes)
                                     </Typography>
                                   </TableCell>
                                 </TableRow>
-                                {agrupadosPorEO[eq].map(p => (
+                                {[...agrupadosPorEO[eq]].sort(compararOrdenOperativo).map(p => (
                                   <TableRow key={p.id}>
                                     <TableCell>
                                       {p.nombre} 
-                                      {p.esAgregado && <Chip label="Agregado" size="small" color="warning" sx={{ml:1, fontSize:'0.65rem'}}/>}
+                                      {p.esAgregado && <Chip label={`Agregado · ${p.origen || 'Origen no indicado'}`} size="small" color="warning" sx={{ml:1, fontSize:'0.65rem'}}/>}
                                     </TableCell>
                                     <TableCell>{p.categoria}</TableCell>
-                                    <TableCell>{p.esAgregado ? 'Externo' : `SO ${p.so}`}</TableCell>
+                                    <TableCell>{p.esAgregado ? (p.origen || 'Externo') : `SO ${p.so}`}</TableCell>
                                     <TableCell align="center">
                                       <IconButton size="small" color="error" onClick={() => handleDeleteComponenteComision(p)}>
                                         <span className="material-icons" style={{fontSize: 20}}>delete</span>
@@ -1768,7 +1819,7 @@
                       <InputLabel>Agente</InputLabel>
                       <Select value={consultaAgenteId} label="Agente" onChange={(e) => setConsultaAgenteId(e.target.value)}>
                         <MenuItem value=""><em>Seleccione Agente</em></MenuItem>
-                        {efectivosFiltradosConsulta.map(p => <MenuItem key={p.id} value={p.id}>{p.nombre} (SO {p.so} - Eq {p.equipo})</MenuItem>)}
+                        {efectivosFiltradosConsulta.map(p => <MenuItem key={p.id} value={p.id}>{p.nombre} (SO {p.so} - {etiquetaGamo(p.equipo)})</MenuItem>)}
                       </Select>
                     </FormControl>
                   </Grid>
@@ -1824,7 +1875,7 @@
                   </Box>
                 </Box>
                 <Typography variant="body2" color="text.secondary" mt={1}>
-                  Periodo: {bloqueSeleccionado.inicio} al {bloqueSeleccionado.fin}
+                  Periodo: {formatearFecha(bloqueSeleccionado.inicio)} al {formatearFecha(bloqueSeleccionado.fin)}
                 </Typography>
               </Paper>
 
@@ -1843,7 +1894,7 @@
                   <Table size="small" sx={{ minWidth: 4000, width: '100%' }} stickyHeader>
                     <TableHead>
                       <TableRow>
-                        <TableCell sx={{ fontWeight: 'bold', minWidth: 80, position: 'sticky', left: 0, zIndex: 3, backgroundColor: '#1e3a8a', color: 'white', borderRight: '1px solid rgba(255,255,255,0.2)' }}>Equipo</TableCell>
+                        <TableCell sx={{ fontWeight: 'bold', minWidth: 80, position: 'sticky', left: 0, zIndex: 3, backgroundColor: '#1e3a8a', color: 'white', borderRight: '1px solid rgba(255,255,255,0.2)' }}>Gamo</TableCell>
                         <TableCell sx={{ fontWeight: 'bold', minWidth: 70, position: 'sticky', left: 80, zIndex: 3, backgroundColor: '#1e3a8a', color: 'white', borderRight: '1px solid rgba(255,255,255,0.2)' }}>Categoría</TableCell>
                         <TableCell sx={{ fontWeight: 'bold', minWidth: 150, position: 'sticky', left: 150, zIndex: 3, backgroundColor: '#1e3a8a', color: 'white', borderRight: '1px solid rgba(255,255,255,0.2)' }}>Nombre y Apellidos</TableCell>
                         {diasBloque.map((dia, idx) => {
@@ -1882,7 +1933,7 @@
                           <TableRow className="table-header-eo">
                             <TableCell colSpan={diasBloque.length + 3} sx={{ position: 'sticky', left: 0, zIndex: 2, backgroundColor: '#f5f5f5', borderRight: '1px solid #e0e0e0' }}>
                               <Typography variant="subtitle2" fontWeight="600" color="primary">
-                                Equipo {equipo} ({empleados.length} componentes)
+                                {etiquetaGamo(equipo)} ({empleados.length} componentes)
                               </Typography>
                             </TableCell>
                           </TableRow>
@@ -1893,7 +1944,7 @@
                             })
                             .map(empleado => (
                               <TableRow key={empleado.id}>
-                                <TableCell sx={{ position: 'sticky', left: 0, zIndex: 2, backgroundColor: 'white', borderRight: '1px solid #e0e0e0' }}>{empleado.equipo}</TableCell>
+                                <TableCell sx={{ position: 'sticky', left: 0, zIndex: 2, backgroundColor: 'white', borderRight: '1px solid #e0e0e0' }}>{etiquetaGamo(empleado.equipo)}</TableCell>
                                 <TableCell sx={{ position: 'sticky', left: 80, zIndex: 2, backgroundColor: 'white', borderRight: '1px solid #e0e0e0' }}>{empleado.categoria}</TableCell>
                                 <TableCell sx={{ position: 'sticky', left: 150, zIndex: 2, backgroundColor: 'white', borderRight: '1px solid #e0e0e0' }}>{empleado.nombre}</TableCell>
                                 {diasBloque.map((dia, idx) => {
@@ -1949,7 +2000,7 @@
                         </Box>
                       </Box>
                       <Typography variant="body2" color="text.secondary" mt={1}>
-                        Periodo: {bloqueSeleccionadoServicios.inicio} al {bloqueSeleccionadoServicios.fin}
+                        Periodo: {formatearFecha(bloqueSeleccionadoServicios.inicio)} al {formatearFecha(bloqueSeleccionadoServicios.fin)}
                       </Typography>
                     </Paper>
 
@@ -1995,7 +2046,7 @@
                                   <Typography variant="caption" fontWeight="bold" sx={{ display: 'block' }}>{nombreDia}</Typography>
                                   <Typography variant="body2" fontWeight="bold">{diaNum}</Typography>
                                   <Typography variant="caption" sx={{ display: 'block', mt: 0.5, fontSize: 10 }}>
-                                    {dia.fecha.split('-').reverse().join('/')}
+                                    {formatearFecha(dia.fecha)}
                                   </Typography>
                                   {serviciosDia.length > 0 && (
                                     <Box sx={{ mt: 1 }}>
@@ -2034,7 +2085,7 @@
                     {/* Modal para Servicios */}
                     <Dialog open={dialogServicio} onClose={() => setDialogServicio(false)} maxWidth="sm" fullWidth>
                       <DialogTitle>
-                        {servicioFormData.id ? 'Editar servicio' : 'Añadir servicio'} — {servicioFormData.fecha ? servicioFormData.fecha.split('-').reverse().join('/') : ''}
+                        {servicioFormData.id ? 'Editar servicio' : 'Añadir servicio'} — {formatearFecha(servicioFormData.fecha)}
                       </DialogTitle>
                       <DialogContent>
                         <TextField
@@ -2151,7 +2202,7 @@
                   }, {});
 
                   // Agrupar por Equipo dentro de cada SO
-                  const estructura = Object.keys(agrupadosPorSO).sort().map(so => {
+                  const estructura = Object.keys(agrupadosPorSO).sort(compararClavesOrganicas).map(so => {
                     const agentesSO = agrupadosPorSO[so];
                     const agrupadosPorEquipo = agentesSO.reduce((acc, empleado) => {
                       const equipo = empleado.equipo || 'Sin Equipo';
@@ -2163,13 +2214,10 @@
                     return {
                       so,
                       totalSO: agentesSO.length,
-                      equipos: Object.keys(agrupadosPorEquipo).sort().map(equipo => ({
+                      equipos: Object.keys(agrupadosPorEquipo).sort(compararClavesOrganicas).map(equipo => ({
                         equipo,
                         totalEquipo: agrupadosPorEquipo[equipo].length,
-                        agentes: agrupadosPorEquipo[equipo].sort((a, b) => {
-                          const catOrder = { 'Inspector': 0, 'Subinspector': 1, 'Oficial': 2, 'Policía': 3 };
-                          return catOrder[a.categoria] - catOrder[b.categoria] || a.nombre.localeCompare(b.nombre);
-                        })
+                        agentes: agrupadosPorEquipo[equipo].sort(compararOrdenOperativo)
                       }))
                     };
                   });
@@ -2185,13 +2233,13 @@
                       {estructura.map(({ so, totalSO, equipos }) => (
                         <Box key={so} mb={4}>
                           <Typography variant="h6" fontWeight="bold" color="primary" mb={2}>
-                            {so === 'EM' ? 'EM' : `Gamo ${so}`}: {totalSO} agentes
+                            {so === 'EM' ? 'Gamo 50 (Equipo de Mando)' : `Gamo ${so}`}: {totalSO} agentes
                           </Typography>
 
                           {equipos.map(({ equipo, totalEquipo, agentes }) => (
                             <Box key={equipo} mb={3} ml={3}>
                               <Typography variant="subtitle1" fontWeight="600" color="secondary" mb={2}>
-                                {equipo.includes('Gamo') || equipo.includes('EM') ? equipo : `Equipo ${equipo}`}: {totalEquipo} agentes
+                                {etiquetaGamo(equipo)}: {totalEquipo} agentes
                               </Typography>
 
                               <TableContainer sx={{ maxWidth: 800 }}>
@@ -2200,7 +2248,7 @@
                                     <TableRow>
                                       <TableCell sx={{ fontWeight: 'bold' }}>Nombre</TableCell>
                                       <TableCell sx={{ fontWeight: 'bold' }}>Categoría</TableCell>
-                                      <TableCell sx={{ fontWeight: 'bold' }}>Equipo</TableCell>
+                                      <TableCell sx={{ fontWeight: 'bold' }}>Gamo</TableCell>
                                     </TableRow>
                                   </TableHead>
                                   <TableBody>
@@ -2208,7 +2256,7 @@
                                       <TableRow key={agente.id}>
                                         <TableCell>{agente.nombre}</TableCell>
                                         <TableCell>{agente.categoria}</TableCell>
-                                        <TableCell>{agente.equipo}</TableCell>
+                                        <TableCell>{etiquetaGamo(agente.equipo)}</TableCell>
                                       </TableRow>
                                     ))}
                                   </TableBody>
@@ -2234,8 +2282,8 @@
                       <MenuItem value="AP">AP</MenuItem><MenuItem value="VA">VA</MenuItem><MenuItem value="AFG">AFG</MenuItem><MenuItem value="CH">CH</MenuItem><MenuItem value="CU">CU</MenuItem><MenuItem value="BJ">BJ</MenuItem><MenuItem value="PT">PT</MenuItem>
                     </Select>
                   </FormControl>
-                  <TextField fullWidth margin="dense" label="Fecha Inicio" type="date" InputLabelProps={{ shrink: true }} value={calendarFormData.fecha_inicio} onChange={(e) => setCalendarFormData({...calendarFormData, fecha_inicio: e.target.value})} required sx={{ mt: 2 }}/>
-                  <TextField fullWidth margin="dense" label="Fecha Fin" type="date" InputLabelProps={{ shrink: true }} value={calendarFormData.fecha_fin} onChange={(e) => setCalendarFormData({...calendarFormData, fecha_fin: e.target.value})} required sx={{ mt: 2 }}/>
+                  <TextField fullWidth margin="dense" label="Fecha Inicio" type="date" InputLabelProps={{ shrink: true }} inputProps={{ lang: 'es-ES' }} value={calendarFormData.fecha_inicio} onChange={(e) => setCalendarFormData({...calendarFormData, fecha_inicio: e.target.value})} required sx={{ mt: 2 }}/>
+                  <TextField fullWidth margin="dense" label="Fecha Fin" type="date" InputLabelProps={{ shrink: true }} inputProps={{ lang: 'es-ES' }} value={calendarFormData.fecha_fin} onChange={(e) => setCalendarFormData({...calendarFormData, fecha_fin: e.target.value})} required sx={{ mt: 2 }}/>
                 </DialogContent>
                 <DialogActions>
                   {calendarFormData.id && <Button color="error" onClick={handleDeletePermisoCalendar}>Eliminar</Button>}
@@ -2256,8 +2304,8 @@
                       <MenuItem value="AP">AP</MenuItem><MenuItem value="VA">VA</MenuItem><MenuItem value="AFG">AFG</MenuItem><MenuItem value="CH">CH</MenuItem><MenuItem value="CU">CU</MenuItem><MenuItem value="BJ">BJ</MenuItem><MenuItem value="PT">PT</MenuItem>
                     </Select>
                   </FormControl>
-                  <TextField fullWidth margin="dense" label="Fecha Inicio" type="date" InputLabelProps={{ shrink: true }} value={bloqueFormData.fecha_inicio} onChange={(e) => setBloqueFormData({...bloqueFormData, fecha_inicio: e.target.value})} required sx={{ mt: 2 }}/>
-                  <TextField fullWidth margin="dense" label="Fecha Fin" type="date" InputLabelProps={{ shrink: true }} value={bloqueFormData.fecha_fin} onChange={(e) => setBloqueFormData({...bloqueFormData, fecha_fin: e.target.value})} required sx={{ mt: 2 }}/>
+                  <TextField fullWidth margin="dense" label="Fecha Inicio" type="date" InputLabelProps={{ shrink: true }} inputProps={{ lang: 'es-ES' }} value={bloqueFormData.fecha_inicio} onChange={(e) => setBloqueFormData({...bloqueFormData, fecha_inicio: e.target.value})} required sx={{ mt: 2 }}/>
+                  <TextField fullWidth margin="dense" label="Fecha Fin" type="date" InputLabelProps={{ shrink: true }} inputProps={{ lang: 'es-ES' }} value={bloqueFormData.fecha_fin} onChange={(e) => setBloqueFormData({...bloqueFormData, fecha_fin: e.target.value})} required sx={{ mt: 2 }}/>
                 </DialogContent>
                 <DialogActions>
                   <Button onClick={() => setDialogPermisoBloque(false)}>Cancelar</Button>
@@ -2281,8 +2329,8 @@
                 <DialogTitle>Nueva Comisión de Servicio</DialogTitle>
                 <DialogContent>
                   <TextField fullWidth margin="dense" label="Localidad (Ej: Melilla)" value={newComision.localidad} onChange={(e) => setNewComision({...newComision, localidad: e.target.value})} required />
-                  <TextField fullWidth margin="dense" label="Fecha Inicio" type="date" InputLabelProps={{ shrink: true }} value={newComision.fecha_inicio} onChange={(e) => setNewComision({...newComision, fecha_inicio: e.target.value})} required sx={{ mt: 2 }}/>
-                  <TextField fullWidth margin="dense" label="Fecha Fin" type="date" InputLabelProps={{ shrink: true }} value={newComision.fecha_fin} onChange={(e) => setNewComision({...newComision, fecha_fin: e.target.value})} required sx={{ mt: 2 }}/>
+                  <TextField fullWidth margin="dense" label="Fecha Inicio" type="date" InputLabelProps={{ shrink: true }} inputProps={{ lang: 'es-ES' }} value={newComision.fecha_inicio} onChange={(e) => setNewComision({...newComision, fecha_inicio: e.target.value})} required sx={{ mt: 2 }}/>
+                  <TextField fullWidth margin="dense" label="Fecha Fin" type="date" InputLabelProps={{ shrink: true }} inputProps={{ lang: 'es-ES' }} value={newComision.fecha_fin} onChange={(e) => setNewComision({...newComision, fecha_fin: e.target.value})} required sx={{ mt: 2 }}/>
                 </DialogContent>
                 <DialogActions>
                   <Button onClick={() => setDialogNuevaComision(false)}>Cancelar</Button>
