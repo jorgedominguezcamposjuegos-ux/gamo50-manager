@@ -1141,6 +1141,7 @@
       let agrupadosPorEO = {};
       let totalSO = {};
       let totalGO = 0;
+      let resumenEscalasComision = '00 00 00 00';
       
       if (efectivosComision) {
         const todos = [
@@ -1148,6 +1149,9 @@
           ...efectivosComision.agregados.map(a => ({...a, esAgregado: true, so: a.so || 'AGREGADO'}))
         ];
         totalGO = todos.length;
+        resumenEscalasComision = ['Inspector', 'Subinspector', 'Oficial', 'Policía']
+          .map(categoria => String(todos.filter(p => p.categoria === categoria).length).padStart(2, '0'))
+          .join(' ');
         todos.forEach(p => {
           const eq = p.equipo || 'Sin Equipo';
           if (!agrupadosPorEO[eq]) agrupadosPorEO[eq] = [];
@@ -1696,6 +1700,12 @@
                       <Box display="flex" justifyContent="space-between">
                         <Typography variant="h6">TOTAL GO COMISIÓN:</Typography>
                         <Typography variant="h6" color="primary">{totalGO}</Typography>
+                      </Box>
+                      <Box display="flex" justifyContent="space-between" alignItems="center" mt={1}>
+                        <Typography variant="body2" color="text.secondary">Por escalas (I · S · O · P):</Typography>
+                        <Typography variant="h6" fontWeight="700" sx={{ fontFamily: 'monospace', letterSpacing: 1 }}>
+                          {resumenEscalasComision}
+                        </Typography>
                       </Box>
                     </Paper>
 
