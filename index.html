@@ -161,6 +161,7 @@
       const [dialogNuevaComision, setDialogNuevaComision] = React.useState(false);
       const [newComision, setNewComision] = React.useState({ localidad: '', fecha_inicio: '', fecha_fin: '' });
       const [newAgregado, setNewAgregado] = React.useState({ nombre: '', categoria: 'Policía', origen: '', equipo: '' });
+      const [editingAgregadoId, setEditingAgregadoId] = React.useState('');
       const [observaciones, setObservaciones] = React.useState('');
       const [guardandoObs, setGuardandoObs] = React.useState(false);
 
@@ -996,28 +997,56 @@
             : numeroDestino <= 53 ? '51'
             : numeroDestino <= 56 ? '54'
             : '57';
-          
-          const nuevoAgregado = {
-            id: generateUUID(),
+
+          const datosAgregado = {
             nombre: newAgregado.nombre,
             categoria: newAgregado.categoria,
             origen: newAgregado.origen,
             equipo: newAgregado.equipo,
             so: soDestino
           };
-          
-          await comisionRef.update({
-            agregados: firebase.firestore.FieldValue.arrayUnion(nuevoAgregado)
-          });
+
+          if (editingAgregadoId) {
+            const comisionDoc = await comisionRef.get();
+            if (!comisionDoc.exists) throw new Error('La comisión ya no existe');
+            let agregadoEncontrado = false;
+            const agregadosActualizados = (comisionDoc.data().agregados || []).map(agregado => {
+              if (agregado.id !== editingAgregadoId) return agregado;
+              agregadoEncontrado = true;
+              return { ...agregado, ...datosAgregado };
+            });
+            if (!agregadoEncontrado) throw new Error('El agregado ya no existe en la comisión');
+            await comisionRef.update({ agregados: agregadosActualizados });
+          } else {
+            await comisionRef.update({
+              agregados: firebase.firestore.FieldValue.arrayUnion({ id: generateUUID(), ...datosAgregado })
+            });
+          }
           
           setNewAgregado({ nombre: '', categoria: 'Policía', origen: '', equipo: '' });
-          fetchEfectivosComision(selectedComisionId);
-          fetchData();
-          setSnackbar({ open: true, message: 'Agregado añadido', severity: 'success' });
+          setEditingAgregadoId('');
+          await fetchEfectivosComision(selectedComisionId);
+          await fetchData();
+          setSnackbar({ open: true, message: editingAgregadoId ? 'Agregado actualizado' : 'Agregado añadido', severity: 'success' });
         } catch (error) {
-          console.error('Error añadiendo agregado:', error);
-          setSnackbar({ open: true, message: 'Error añadiendo agregado', severity: 'error' });
+          console.error('Error guardando agregado:', error);
+          setSnackbar({ open: true, message: 'Error guardando agregado', severity: 'error' });
         }
+      };
+
+      const handleEditAgregado = (agregado) => {
+        setEditingAgregadoId(agregado.id);
+        setNewAgregado({
+          nombre: agregado.nombre || '',
+          categoria: agregado.categoria || 'Policía',
+          origen: agregado.origen || '',
+          equipo: String(agregado.equipo || '')
+        });
+      };
+
+      const handleCancelEditAgregado = () => {
+        setEditingAgregadoId('');
+        setNewAgregado({ nombre: '', categoria: 'Policía', origen: '', equipo: '' });
       };
 
       const handleDeleteComponenteComision = async (componente) => {
@@ -1034,6 +1063,7 @@
             await comisionRef.update({
               agregados: agregadosRestantes
             });
+            if (editingAgregadoId === componente.id) handleCancelEditAgregado();
           } else {
             await comisionRef.update({
               excluidos_manuales: firebase.firestore.FieldValue.arrayUnion(componente.id)
@@ -1644,7 +1674,7 @@
                   <Box display="flex" alignItems="center" gap={2}>
                     <FormControl sx={{ minWidth: 300 }}>
                       <InputLabel>Seleccionar Comisión de Servicio</InputLabel>
-                      <Select value={selectedComisionId} label="Seleccionar Comisión de Servicio" onChange={(e) => setSelectedComisionId(e.target.value)}>
+                      <Select value={selectedComisionId} label="Seleccionar Comisión de Servicio" onChange={(e) => { setSelectedComisionId(e.target.value); handleCancelEditAgregado(); }}>
                         <MenuItem value=""><em>-- Ninguna --</em></MenuItem>
                         {comisiones.map(c => (
                           <MenuItem key={c.id} value={c.id}>
@@ -1710,7 +1740,7 @@
                     </Paper>
 
                     <Paper className="glass-card" sx={{ p: 3, mb: 3 }}>
-                      <Typography variant="h6" mb={2} fontWeight="600">Añadir Agregado Externo</Typography>
+                      <Typography variant="h6" mb={2} fontWeight="600">{editingAgregadoId ? 'Editar Agregado Externo' : 'Añadir Agregado Externo'}</Typography>
                       <form onSubmit={handleAddAgregado}>
                         <TextField fullWidth margin="normal" label="Nombre y Apellidos" value={newAgregado.nombre} onChange={(e)=>setNewAgregado({...newAgregado, nombre: e.target.value})} required size="small"/>
                         <FormControl fullWidth margin="normal" size="small">
@@ -1736,7 +1766,12 @@
                             ))}
                           </Select>
                         </FormControl>
-                        <Button type="submit" variant="outlined" fullWidth sx={{ mt: 2 }} disableElevation>Añadir a la Comisión</Button>
+                        <Button type="submit" variant={editingAgregadoId ? 'contained' : 'outlined'} fullWidth sx={{ mt: 2 }} disableElevation>
+                          {editingAgregadoId ? 'Guardar cambios' : 'Añadir a la Comisión'}
+                        </Button>
+                        {editingAgregadoId && (
+                          <Button type="button" color="inherit" fullWidth sx={{ mt: 1 }} onClick={handleCancelEditAgregado}>Cancelar edición</Button>
+                        )}
                       </form>
                     </Paper>
 
@@ -1772,7 +1807,7 @@
                               <TableCell><strong>Nombre</strong></TableCell>
                               <TableCell><strong>Categoría</strong></TableCell>
                               <TableCell><strong>Origen</strong></TableCell>
-                              <TableCell align="center"><strong>Eliminar</strong></TableCell>
+                              <TableCell align="center"><strong>Acciones</strong></TableCell>
                             </TableRow>
                           </TableHead>
                           <TableBody>
@@ -1794,7 +1829,12 @@
                                     <TableCell>{p.categoria}</TableCell>
                                     <TableCell>{p.esAgregado ? (p.origen || 'Externo') : `SO ${p.so}`}</TableCell>
                                     <TableCell align="center">
-                                      <IconButton size="small" color="error" onClick={() => handleDeleteComponenteComision(p)}>
+                                      {p.esAgregado && (
+                                        <IconButton size="small" color="primary" title="Editar agregado" aria-label={`Editar agregado ${p.nombre}`} onClick={() => handleEditAgregado(p)}>
+                                          <span className="material-icons" style={{fontSize: 20}}>edit</span>
+                                        </IconButton>
+                                      )}
+                                      <IconButton size="small" color="error" title={p.esAgregado ? 'Eliminar agregado' : 'Excluir de la comisión'} aria-label={`${p.esAgregado ? 'Eliminar agregado' : 'Excluir'} ${p.nombre}`} onClick={() => handleDeleteComponenteComision(p)}>
                                         <span className="material-icons" style={{fontSize: 20}}>delete</span>
                                       </IconButton>
                                     </TableCell>
