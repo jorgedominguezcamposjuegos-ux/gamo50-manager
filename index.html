@@ -888,7 +888,7 @@
           const comObj = comisiones.find(c => c.id === selectedComisionId);
           if (comObj) setObservaciones(comObj.observaciones || '');
         }
-      }, [selectedComisionId, comisiones]);
+      }, [selectedComisionId, comisiones, data?.efectivos, data?.permisos]);
 
       const handleCrearComision = async (e) => {
         e.preventDefault();
