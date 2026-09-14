@@ -127,6 +127,18 @@
     }
     const OPCIONES_MESES = generarOpcionesMeses();
 
+    const TIPOS_PERMISO = [
+      { valor: 'AP', etiqueta: 'AP' },
+      { valor: 'VA', etiqueta: 'VA' },
+      { valor: 'AFG', etiqueta: 'AFG' },
+      { valor: 'CH', etiqueta: 'CH' },
+      { valor: 'CU', etiqueta: 'CU' },
+      { valor: 'BJ', etiqueta: 'BJ' },
+      { valor: 'PT', etiqueta: 'PT' },
+      { valor: 'CSA', etiqueta: 'CSA (Comisión como agregado)' },
+      { valor: 'OT', etiqueta: 'OT (Otros)' }
+    ];
+
     function formatearFecha(valor) {
       if (!valor) return '';
       if (typeof valor === 'string') {
@@ -1568,7 +1580,7 @@
                       <FormControl fullWidth margin="normal">
                         <InputLabel>Tipo de Permiso</InputLabel>
                         <Select value={formData.tipo} label="Tipo de Permiso" onChange={(e) => setFormData({...formData, tipo: e.target.value})} required>
-                          <MenuItem value="AP">AP</MenuItem><MenuItem value="VA">VA</MenuItem><MenuItem value="AFG">AFG</MenuItem><MenuItem value="CH">CH</MenuItem><MenuItem value="CU">CU</MenuItem><MenuItem value="BJ">BJ</MenuItem><MenuItem value="PT">PT</MenuItem><MenuItem value="CSA">CSA (Comisión como agregado)</MenuItem>
+                          {TIPOS_PERMISO.map(tipo => <MenuItem key={tipo.valor} value={tipo.valor}>{tipo.etiqueta}</MenuItem>)}
                         </Select>
                       </FormControl>
                       <TextField fullWidth margin="normal" label="Fecha Inicio" type="date" InputLabelProps={{ shrink: true }} inputProps={{ lang: 'es-ES' }} value={formData.fecha_inicio} onChange={(e) => setFormData({...formData, fecha_inicio: e.target.value})} required />
@@ -2329,7 +2341,7 @@
                   <FormControl fullWidth margin="dense" size="small" sx={{ mt: 2 }}>
                     <InputLabel>Tipo de Permiso</InputLabel>
                     <Select value={calendarFormData.tipo} label="Tipo de Permiso" onChange={(e) => setCalendarFormData({...calendarFormData, tipo: e.target.value})} required>
-                      <MenuItem value="AP">AP</MenuItem><MenuItem value="VA">VA</MenuItem><MenuItem value="AFG">AFG</MenuItem><MenuItem value="CH">CH</MenuItem><MenuItem value="CU">CU</MenuItem><MenuItem value="BJ">BJ</MenuItem><MenuItem value="PT">PT</MenuItem>
+                      {TIPOS_PERMISO.map(tipo => <MenuItem key={tipo.valor} value={tipo.valor}>{tipo.etiqueta}</MenuItem>)}
                     </Select>
                   </FormControl>
                   <TextField fullWidth margin="dense" label="Fecha Inicio" type="date" InputLabelProps={{ shrink: true }} inputProps={{ lang: 'es-ES' }} value={calendarFormData.fecha_inicio} onChange={(e) => setCalendarFormData({...calendarFormData, fecha_inicio: e.target.value})} required sx={{ mt: 2 }}/>
@@ -2351,7 +2363,7 @@
                   <FormControl fullWidth margin="dense" size="small" sx={{ mt: 2 }}>
                     <InputLabel>Tipo de Permiso</InputLabel>
                     <Select value={bloqueFormData.tipo} label="Tipo de Permiso" onChange={(e) => setBloqueFormData({...bloqueFormData, tipo: e.target.value})} required>
-                      <MenuItem value="AP">AP</MenuItem><MenuItem value="VA">VA</MenuItem><MenuItem value="AFG">AFG</MenuItem><MenuItem value="CH">CH</MenuItem><MenuItem value="CU">CU</MenuItem><MenuItem value="BJ">BJ</MenuItem><MenuItem value="PT">PT</MenuItem>
+                      {TIPOS_PERMISO.map(tipo => <MenuItem key={tipo.valor} value={tipo.valor}>{tipo.etiqueta}</MenuItem>)}
                     </Select>
                   </FormControl>
                   <TextField fullWidth margin="dense" label="Fecha Inicio" type="date" InputLabelProps={{ shrink: true }} inputProps={{ lang: 'es-ES' }} value={bloqueFormData.fecha_inicio} onChange={(e) => setBloqueFormData({...bloqueFormData, fecha_inicio: e.target.value})} required sx={{ mt: 2 }}/>
