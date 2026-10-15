@@ -4,7 +4,8 @@
   "description": "Web App estática para Gamo 50 Manager con Firebase Firestore",
   "main": "migrate-to-firebase.js",
   "scripts": {
-    "migrate": "node migrate-to-firebase.js"
+    "migrate": "node migrate-to-firebase.js",
+    "test:control-salida": "node tests/control-salida.test.cjs"
   },
   "keywords": [
     "gamo50",

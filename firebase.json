@@ -1,0 +1,30 @@
+{
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "hosting": {
+    "public": ".",
+    "ignore": [
+      "firebase.json",
+      "firestore.rules",
+      "firestore.indexes.json",
+      "data.json",
+      "*.pdf",
+      "DISTRIBUCIÓN CEUTA.pdf",
+      "**/*.pdf",
+      "README.md",
+      "package.json",
+      "package-lock.json",
+      "migrate-to-firebase.js",
+      "js/firebase-config.js",
+      ".firebase/**",
+      "node_modules/**",
+      ".git/**",
+      "**/.*",
+      "**/node_modules/**",
+      "tests/**"
+    ],
+    "cleanUrls": true
+  }
+}

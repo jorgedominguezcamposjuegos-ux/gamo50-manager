@@ -40,6 +40,8 @@
 
   <!-- Validation functions -->
   <script src="js/validation.js"></script>
+  <script src="js/jszip.min.js"></script>
+  <script src="js/control-salida.js"></script>
 
   <script>
     // Inicializar Firebase con compat SDK
@@ -171,6 +173,10 @@
       const [selectedComisionId, setSelectedComisionId] = React.useState('');
       const [efectivosComision, setEfectivosComision] = React.useState(null);
       const [dialogNuevaComision, setDialogNuevaComision] = React.useState(false);
+      const [controlSalidaOpen, setControlSalidaOpen] = React.useState(false);
+      const [controlSalidaBusy, setControlSalidaBusy] = React.useState(false);
+      const [controlSalidaDetalles, setControlSalidaDetalles] = React.useState({motivo:'',hotel:'',localidadHotel:'',horaInicio:'',horaFin:''});
+
       const [newComision, setNewComision] = React.useState({ localidad: '', fecha_inicio: '', fecha_fin: '' });
       const [newAgregado, setNewAgregado] = React.useState({ nombre: '', categoria: 'Policía', origen: '', equipo: '' });
       const [editingAgregadoId, setEditingAgregadoId] = React.useState('');
@@ -278,6 +284,38 @@
           return `${year}-${month}-${day}`;
         }
         return String(valor).slice(0, 10);
+      };
+
+      // Explica por qué un integrante no puede formar parte de toda la comisión.
+      // Se usa tanto al calcular los elegibles como antes de reincorporar una
+      // exclusión manual, para que ambas vistas apliquen el mismo criterio.
+      const obtenerMotivoNoElegibleComision = (empleado, comision) => {
+        if (!empleado) return 'El integrante ya no figura en el listado de Gamo 50.';
+        if (!comision) return 'No se ha encontrado la comisión seleccionada.';
+
+        const inicioComision = fechaClave(comision.fecha_inicio);
+        const finComision = fechaClave(comision.fecha_fin);
+        const permisoSolapado = data.permisos.find(permiso => {
+          if (permiso.policia_id !== empleado.id) return false;
+          const inicioPermiso = fechaClave(permiso.fecha_inicio);
+          const finPermiso = fechaClave(permiso.fecha_fin);
+          return inicioPermiso <= finComision && finPermiso >= inicioComision;
+        });
+
+        if (permisoSolapado) {
+          return `Tiene ${permisoSolapado.tipo} entre ${formatearFecha(permisoSolapado.fecha_inicio)} y ${formatearFecha(permisoSolapado.fecha_fin)}.`;
+        }
+
+        const cursor = new Date(`${inicioComision}T00:00:00`);
+        const fin = new Date(`${finComision}T00:00:00`);
+        while (cursor <= fin) {
+          if (!isAgentActiveOnDate(empleado.nombre, cursor)) {
+            return `No está activo el ${formatearFecha(cursor)}.`;
+          }
+          cursor.setDate(cursor.getDate() + 1);
+        }
+
+        return '';
       };
 
       // Obtener estado de un empleado en un día específico
@@ -1062,12 +1100,16 @@
       };
 
       const handleDeleteComponenteComision = async (componente) => {
-        if (!window.confirm(`¿Excluir a ${componente.nombre} de la comisión?`)) return;
+        const esAgregado = Boolean(componente.esAgregado);
+        const mensajeConfirmacion = esAgregado
+          ? `¿Eliminar a ${componente.nombre} como agregado externo de la comisión?`
+          : `¿Excluir manualmente a ${componente.nombre} de la comisión? Podrás reincorporarlo mientras cumpla los requisitos de disponibilidad para todo el periodo.`;
+        if (!window.confirm(mensajeConfirmacion)) return;
         try {
           const db = window.firebaseDB;
           const comisionRef = db.collection('comisiones').doc(selectedComisionId);
           
-          if (componente.esAgregado) {
+          if (esAgregado) {
             const comisionDoc = await comisionRef.get();
             if (!comisionDoc.exists) throw new Error('La comisión ya no existe');
             const agregadosActuales = comisionDoc.data().agregados || [];
@@ -1084,10 +1126,33 @@
           
           await fetchEfectivosComision(selectedComisionId);
           await fetchData();
-          setSnackbar({ open: true, message: 'Componente eliminado de la comisión', severity: 'success' });
+          setSnackbar({ open: true, message: esAgregado ? 'Agregado eliminado de la comisión' : 'Componente excluido manualmente de la comisión', severity: 'success' });
         } catch (error) {
           console.error('Error eliminando componente:', error);
           setSnackbar({ open: true, message: 'Error eliminando componente', severity: 'error' });
+        }
+      };
+
+      const handleReincorporarComponente = async (empleado) => {
+        const comision = comisiones.find(c => c.id === selectedComisionId);
+        const motivo = obtenerMotivoNoElegibleComision(empleado, comision);
+        if (motivo) {
+          setSnackbar({ open: true, message: `No se puede reincorporar: ${motivo}`, severity: 'warning' });
+          return;
+        }
+        if (!window.confirm(`¿Reincorporar a ${empleado.nombre} a la comisión?`)) return;
+
+        try {
+          const db = window.firebaseDB;
+          await db.collection('comisiones').doc(selectedComisionId).update({
+            excluidos_manuales: firebase.firestore.FieldValue.arrayRemove(empleado.id)
+          });
+          await fetchEfectivosComision(selectedComisionId);
+          await fetchData();
+          setSnackbar({ open: true, message: 'Componente reincorporado a la comisión', severity: 'success' });
+        } catch (error) {
+          console.error('Error reincorporando componente:', error);
+          setSnackbar({ open: true, message: 'Error reincorporando componente', severity: 'error' });
         }
       };
 
@@ -1178,6 +1243,13 @@
       });
 
       const selectedComObj = comisiones.find(c => c.id === selectedComisionId);
+      const excluidosManualesComision = (selectedComObj?.excluidos_manuales || [])
+        .map(id => data.efectivos.find(empleado => empleado.id === id) || { id, nombre: 'Integrante no localizado' })
+        .sort(compararOrdenOperativo)
+        .map(empleado => ({
+          empleado,
+          motivo: obtenerMotivoNoElegibleComision(empleado.nombre === 'Integrante no localizado' ? null : empleado, selectedComObj)
+        }));
       const efectivosFiltradosConsulta = data.efectivos.filter(p => filtroEOConsulta === 'Todos' || p.equipo === filtroEOConsulta);
 
       let agrupadosPorEO = {};
@@ -1209,6 +1281,24 @@
           }
         });
       }
+
+      const abrirControlSalida = () => {
+        if (!selectedComObj) return;
+        setControlSalidaDetalles({motivo:'',hotel:'',localidadHotel:selectedComObj.localidad || '',horaInicio:'',horaFin:'',...(selectedComObj.control_salida || {})});
+        setControlSalidaOpen(true);
+      };
+      const generarControlSalida = async (event) => {
+        event.preventDefault();
+        if (controlSalidaBusy || !selectedComObj) return;
+        setControlSalidaBusy(true);
+        try {
+          const resultado = await window.ControlSalida.download(data, selectedComObj, controlSalidaDetalles);
+          setControlSalidaOpen(false);
+          setSnackbar({open:true,severity:resultado.missing.length ? 'warning' : 'success',message:resultado.missing.length ? `Excel generado. Faltan datos de identidad de: ${resultado.missing.join(', ')}` : `Control de salida generado: ${resultado.total} en comisión y ${resultado.base.length} en base.`});
+        } catch (error) {
+          setSnackbar({open:true,severity:'error',message:error.message || 'No se pudo generar el Control de salida.'});
+        } finally { setControlSalidaBusy(false); }
+      };
 
       const generarCuadranteExcel = () => {
         if (!selectedComObj) return;
@@ -1714,9 +1804,10 @@
                   </Box>
                   
                   {selectedComObj && (
-                    <Button variant="contained" color="secondary" onClick={generarCuadranteExcel} disableElevation startIcon={<span className="material-icons">table_chart</span>}>
-                      Generar Excel
-                    </Button>
+                    <Box display="flex" gap={1} flexWrap="wrap">
+                      <Button variant="outlined" color="secondary" onClick={generarCuadranteExcel} disableElevation startIcon={<span className="material-icons">table_chart</span>}>Generar cuadrante Excel</Button>
+                      <Button variant="contained" color="secondary" onClick={abrirControlSalida} disableElevation startIcon={<span className="material-icons">download</span>}>Generar Control de salida</Button>
+                    </Box>
                   )}
                 </Box>
               </Paper>
@@ -1752,6 +1843,45 @@
                     </Paper>
 
                     <Paper className="glass-card" sx={{ p: 3, mb: 3 }}>
+                      <Typography variant="h6" mb={1} fontWeight="600">Excluidos manualmente</Typography>
+                      <Typography variant="body2" color="text.secondary" mb={2}>
+                        El personal excluido puede reincorporarse si está disponible durante todo el periodo de la comisión.
+                      </Typography>
+                      {excluidosManualesComision.length === 0 ? (
+                        <Typography variant="body2" color="text.secondary">No hay componentes excluidos manualmente.</Typography>
+                      ) : (
+                        <Box display="flex" flexDirection="column" gap={1.5}>
+                          {excluidosManualesComision.map(({ empleado, motivo }) => (
+                            <Box
+                              key={empleado.id}
+                              sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1.5, p: 1.5 }}
+                            >
+                              <Typography variant="body2" fontWeight="600">{empleado.nombre}</Typography>
+                              {empleado.nombre !== 'Integrante no localizado' && (
+                                <Typography variant="caption" color="text.secondary" display="block" mb={motivo ? 0.5 : 1}>
+                                  SO {empleado.so || '—'} · {etiquetaGamo(empleado.equipo)}
+                                </Typography>
+                              )}
+                              {motivo && (
+                                <Typography variant="caption" color="error" display="block" mb={1}>
+                                  No disponible: {motivo}
+                                </Typography>
+                              )}
+                              <Button
+                                size="small"
+                                variant="outlined"
+                                disabled={Boolean(motivo)}
+                                onClick={() => handleReincorporarComponente(empleado)}
+                              >
+                                Reincorporar
+                              </Button>
+                            </Box>
+                          ))}
+                        </Box>
+                      )}
+                    </Paper>
+
+                    <Paper className="glass-card" sx={{ p: 3, mb: 3 }}>
                       <Typography variant="h6" mb={2} fontWeight="600">{editingAgregadoId ? 'Editar Agregado Externo' : 'Añadir Agregado Externo'}</Typography>
                       <form onSubmit={handleAddAgregado}>
                         <TextField fullWidth margin="normal" label="Nombre y Apellidos" value={newAgregado.nombre} onChange={(e)=>setNewAgregado({...newAgregado, nombre: e.target.value})} required size="small"/>
@@ -1768,6 +1898,8 @@
                             <MenuItem value="Gamo 20">Gamo 20</MenuItem>
                             <MenuItem value="Gamo 30">Gamo 30</MenuItem>
                             <MenuItem value="Gamo 40">Gamo 40</MenuItem>
+                            <MenuItem value="EOMA">EOMA</MenuItem>
+                            <MenuItem value="SOMA">SOMA</MenuItem>
                           </Select>
                         </FormControl>
                         <FormControl fullWidth margin="normal" size="small">
@@ -1846,7 +1978,7 @@
                                           <span className="material-icons" style={{fontSize: 20}}>edit</span>
                                         </IconButton>
                                       )}
-                                      <IconButton size="small" color="error" title={p.esAgregado ? 'Eliminar agregado' : 'Excluir de la comisión'} aria-label={`${p.esAgregado ? 'Eliminar agregado' : 'Excluir'} ${p.nombre}`} onClick={() => handleDeleteComponenteComision(p)}>
+                                      <IconButton size="small" color="error" title={p.esAgregado ? 'Eliminar agregado' : 'Excluir manualmente de la comisión'} aria-label={`${p.esAgregado ? 'Eliminar agregado' : 'Excluir manualmente'} ${p.nombre}`} onClick={() => handleDeleteComponenteComision(p)}>
                                         <span className="material-icons" style={{fontSize: 20}}>delete</span>
                                       </IconButton>
                                     </TableCell>
@@ -2373,6 +2505,27 @@
                   <Button onClick={() => setDialogPermisoBloque(false)}>Cancelar</Button>
                   {bloqueFormData.id && <Button color="error" variant="outlined" onClick={(e) => { e.preventDefault(); handleDeletePermisoBloque(); }}>Eliminar Permiso Completo</Button>}
                   <Button type="submit" variant="contained" color="primary">Guardar</Button>
+                </DialogActions>
+              </form>
+            </Dialog>
+
+            <Dialog open={controlSalidaOpen} onClose={() => { if (!controlSalidaBusy) setControlSalidaOpen(false); }} fullWidth maxWidth="sm">
+              <form onSubmit={generarControlSalida}>
+                <DialogTitle>Generar Control de salida</DialogTitle>
+                <DialogContent>
+                  <Typography sx={{mb:2}}>{selectedComObj?.localidad} · {formatearFecha(selectedComObj?.fecha_inicio)} al {formatearFecha(selectedComObj?.fecha_fin)}</Typography>
+                  <TextField fullWidth margin="dense" label="Motivo de la comisión" value={controlSalidaDetalles.motivo} onChange={e=>setControlSalidaDetalles({...controlSalidaDetalles,motivo:e.target.value})} required inputProps={{maxLength:100}} />
+                  <TextField fullWidth margin="dense" label="Hotel" value={controlSalidaDetalles.hotel} onChange={e=>setControlSalidaDetalles({...controlSalidaDetalles,hotel:e.target.value})} inputProps={{maxLength:80}} />
+                  <TextField fullWidth margin="dense" label="Localidad del hotel" value={controlSalidaDetalles.localidadHotel} onChange={e=>setControlSalidaDetalles({...controlSalidaDetalles,localidadHotel:e.target.value})} inputProps={{maxLength:80}} />
+                  <Box display="flex" gap={2} mt={2}>
+                    <TextField fullWidth label="Hora de salida (opcional)" type="time" InputLabelProps={{shrink:true}} value={controlSalidaDetalles.horaInicio} onChange={e=>setControlSalidaDetalles({...controlSalidaDetalles,horaInicio:e.target.value})} />
+                    <TextField fullWidth label="Hora de vuelta (opcional)" type="time" InputLabelProps={{shrink:true}} value={controlSalidaDetalles.horaFin} onChange={e=>setControlSalidaDetalles({...controlSalidaDetalles,horaFin:e.target.value})} />
+                  </Box>
+                  <Typography variant="body2" color="text.secondary" sx={{mt:2}}>Los permisos se tomarán de la comisión. Los días disponibles, CHs y D. A. 6ª quedarán en blanco.</Typography>
+                </DialogContent>
+                <DialogActions>
+                  <Button onClick={()=>setControlSalidaOpen(false)} disabled={controlSalidaBusy}>Cancelar</Button>
+                  <Button type="submit" variant="contained" disabled={controlSalidaBusy}>{controlSalidaBusy ? 'Generando…' : 'Descargar Excel'}</Button>
                 </DialogActions>
               </form>
             </Dialog>

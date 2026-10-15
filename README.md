@@ -214,3 +214,15 @@ Este proyecto es una conversión de la API Python original a una aplicación web
 ## 📄 Licencia
 
 Este proyecto es para uso interno del Gamo 50.
+
+
+## Control de salida
+
+En **Gestión en Comisión de Servicio**, selecciona una comisión y pulsa **Generar Control de salida**. Revisa el motivo, el hotel y su localidad. Las horas son opcionales. **Descargar Excel** genera una copia con los datos cargados en la app.
+
+- La plantilla limpia está en `templates/control-salida.xlsx`. Se conservan las hojas, estilos, imágenes y fórmulas. Los datos de identidad proceden de los registros de efectivos y agregados: `apellidos`, `nombre_pila`, `dni` y `cp`. Los identificadores de efectivos y permisos no se cambian.
+- Un permiso que coincida con cualquier día de la comisión deja al integrante en base durante toda la salida. La prioridad en Salida es BJ, VA, AP, CH y después los demás códigos. PT se convierte en P, CSA en CS y OT en OTROS. Las exclusiones manuales sin permiso llevan OTROS.
+- En base se ordena por Inspector, Subinspector, Oficial y Policía, y por apellidos dentro de cada categoría. Los permisos se reflejan en sus días. Días disponibles, CHs y D. A. 6ª quedan en blanco.
+- El pie incluye Granada y la fecha de generación en la zona horaria Africa/Ceuta. El libro pide recálculo automático a Excel al abrirse.
+- La plantilla admite 50 integrantes, 10 agregados, 19 personas en base y 27 días. Si se superan, la descarga se detiene con un mensaje. Las identidades incompletas se dejan en blanco y se avisa al generar.
+- Pruebas: `npm run test:control-salida`. Para publicar, desplegar solo Hosting; no se necesitan cambios de reglas de Firebase.
