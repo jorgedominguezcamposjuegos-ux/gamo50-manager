@@ -91,15 +91,6 @@
       "en_funciones": false
     },
     {
-      "id": "juan_santiago",
-      "nombre": "Juan Antonio Santiago Martín",
-      "categoria": "Policía",
-      "so": "51",
-      "equipo": "52",
-      "funcion": "Componente",
-      "en_funciones": false
-    },
-    {
       "id": "pedro_marin",
       "nombre": "Pedro Marín Sánchez",
       "categoria": "Oficial",
@@ -692,13 +683,6 @@
       "id": "d75293f5-a679-4151-a96f-bf083f4ae9d0"
     },
     {
-      "policia_id": "juan_santiago",
-      "tipo": "BJ",
-      "fecha_inicio": "2026-01-01",
-      "fecha_fin": "2099-12-31",
-      "id": "227a210c-788f-4e1f-8105-bfa3b0489dd8"
-    },
-    {
       "policia_id": "jesus_romera",
       "tipo": "BJ",
       "fecha_inicio": "2026-01-01",
@@ -849,8 +833,7 @@
         "pedro_marin",
         "raul_perez",
         "antonio_alvarez",
-        "jesus_romera",
-        "juan_santiago"
+        "jesus_romera"
       ],
       "agregan_temporales": [
         {
@@ -931,8 +914,7 @@
         "pedro_marin",
         "raul_perez",
         "antonio_alvarez",
-        "jesus_romera",
-        "juan_santiago"
+        "jesus_romera"
       ],
       "observaciones": "- Primera noche en hotel Ánfora. \n- Los turnos coincidirán con el de SO. "
     }
