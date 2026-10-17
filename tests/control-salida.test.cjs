@@ -20,6 +20,42 @@ async function test(){
  assert.match(xml,/Granada, a/);assert.match(xml,/Origen: EOMA/);assert.match(xml,/r="I79"[^>]*>[\s\S]*?<[^>]*v>2<\//);assert.equal(output.plan.generated,46311);
  assert(!xml.includes('<ns0:sheetData><ns0:sheetData>'));
  const source=await JSZip.loadAsync(template);for(const key of Object.keys(source.files).filter(k=>k.startsWith('xl/media/')))assert.equal(await source.file(key).async('base64'),await zip.file(key).async('base64'));
+ // Excel requires each cell address to occur only once. Empty template cells
+ // must not swallow neighbouring cells when their formulas are replaced.
+ for(const sheet of ['sheet1','sheet2','sheet10']){
+  const text=await zip.file(`xl/worksheets/${sheet}.xml`).async('string');
+  const addresses=[...text.matchAll(/<(?:\w+:)?c\b[^>]*\br="([A-Z]+\d+)"/g)].map(m=>m[1]);
+  assert.equal(new Set(addresses).size,addresses.length,`Duplicate cells in ${sheet}`);
+ }
+ for(const address of ['B10','C10','F10','H10','J10','O63']){
+  const cell=xml.match(new RegExp(`<(?:\\w+:)?c\\b[^>]*\\br="${address}"[^>]*?(?:/>|>[\\s\\S]*?</(?:\\w+:)?c>)`))?.[0];
+  assert(cell,`Missing ${address}`);assert(!cell.includes('t="shared"'),`Old shared formula in ${address}`);
+ }
+ // All fifty slots must guard the source, including unoccupied ones: an Excel
+ // reference to a truly empty cell evaluates to zero and inflates the census.
+ for(let row=10;row<=59;row++){
+  for(const column of ['B','C','F','H','J']){
+   const address=`${column}${row}`,source=`${column}${row+490}`;
+   const cell=xml.match(new RegExp(`<(?:\\w+:)?c\\b[^>]*\\br="${address}"[^>]*>[\\s\\S]*?</(?:\\w+:)?c>`))?.[0];
+   assert(cell?.includes(`${source}&lt;&gt;&quot;&quot;`),`Missing empty-source guard in ${address}`);
+  }
+ }
+ const workbook=await zip.file('xl/workbook.xml').async('string');
+ assert.equal((workbook.match(/<(?:\w+:)?calcPr\b/g)||[]).length,1);
+ assert(workbook.indexOf('<calcPr')<workbook.indexOf('<extLst'),'calcPr must precede extLst');
+ assert.equal(zip.file('xl/calcChain.xml'),null);
+ assert(!(await zip.file('xl/_rels/workbook.xml.rels').async('string')).includes('/calcChain'));
+ assert(!(await zip.file('[Content_Types].xml').async('string')).includes('/xl/calcChain.xml'));
+ // XML parsers accept undeclared prefixes inside attribute values, but Excel
+ // rejects them under the OOXML markup-compatibility rules.
+ for(const name of Object.keys(zip.files).filter(name=>name.endsWith('.xml'))){
+  const text=await zip.file(name).async('string');
+  const root=text.match(/<[^!?/][^>]*>/)?.[0]||'';
+  const ignored=root.match(/\b[\w]+:Ignorable="([^"]*)"/)?.[1]||'';
+  for(const prefix of ignored.trim().split(/\s+/).filter(Boolean)){
+   assert(root.includes(`xmlns:${prefix}=`),`Undeclared compatibility prefix ${prefix} in ${name}`);
+  }
+ }
  console.log('Control de salida: pruebas superadas.');
 }
 test().catch(e=>{console.error(e);process.exitCode=1;});

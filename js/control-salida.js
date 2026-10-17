@@ -44,13 +44,38 @@
   }
   const escape = t => String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   const column = n => { let a=''; for (;n;n=Math.floor((n-1)/26)) a=String.fromCharCode(65+(n-1)%26)+a; return a; };
+  // The prepared template renamed XML prefixes but retained the original
+  // mc:Ignorable values. Those prefixes must remain declared even if they
+  // occur only inside that attribute; Excel web rejects unbound references.
+  function restoreCompatibilityNamespaces(xml) {
+    const namespaces = {
+      x14ac: 'http://schemas.microsoft.com/office/spreadsheetml/2009/9/ac',
+      x16r2: 'http://schemas.microsoft.com/office/spreadsheetml/2015/02/main',
+      xr: 'http://schemas.microsoft.com/office/spreadsheetml/2014/revision',
+      xr2: 'http://schemas.microsoft.com/office/spreadsheetml/2015/revision2',
+      xr3: 'http://schemas.microsoft.com/office/spreadsheetml/2016/revision3'
+    };
+    return xml.replace(/<[^!?/][^>]*>/, root => {
+      const ignorable = root.match(/\b[\w]+:Ignorable="([^"]*)"/);
+      if (!ignorable) return root;
+      let declarations = '';
+      for (const prefix of new Set(ignorable[1].trim().split(/\s+/))) {
+        if (root.includes(`xmlns:${prefix}=`)) continue;
+        if (!namespaces[prefix]) throw new Error(`La plantilla contiene una extensión Excel no declarada: ${prefix}`);
+        declarations += ` xmlns:${prefix}="${namespaces[prefix]}"`;
+      }
+      return root.replace(/>$/, declarations + '>');
+    });
+  }
   class Sheet {
     constructor(xml) {
       this.xml=xml;this.prefix=xml.match(/<([\w]+:)?worksheet\b/)[1]||'';this.rows=new Map();
       const data=xml.match(/<(?:\w+:)?sheetData\b[^>]*>([\s\S]*?)<\/(?:\w+:)?sheetData>/)[1];
-      for(const m of data.matchAll(/<(?:\w+:)?row\b[^>]*(?:\/>|>[\s\S]*?<\/(?:\w+:)?row>)/g)){
+      for(const m of data.matchAll(/<(?:\w+:)?row\b[^>]*?(?:\/>|>[\s\S]*?<\/(?:\w+:)?row>)/g)){
         const header=m[0].match(/^<[^>]+>/)[0],n=Number(header.match(/\br="(\d+)"/)[1]);const cells=new Map();
-        for(const c of m[0].matchAll(/<(?:\w+:)?c\b[^>]*(?:\/>|>[\s\S]*?<\/(?:\w+:)?c>)/g))cells.set(c[0].match(/\br="([A-Z]+\d+)"/)[1],c[0]);
+        // Stop at self-closing cells: otherwise an empty cell consumes its
+        // neighbour and leaves old formulas or duplicate cell addresses behind.
+        for(const c of m[0].matchAll(/<(?:\w+:)?c\b[^>]*?(?:\/>|>[\s\S]*?<\/(?:\w+:)?c>)/g))cells.set(c[0].match(/\br="([A-Z]+\d+)"/)[1],c[0]);
         this.rows.set(n,{header:header.replace(/\/>$/,'>'),cells});
       }
     }
@@ -78,7 +103,11 @@
       const e=byrow.get(r);v(s,`A${r}`,e&&e.equipo?`GAMO-${e.equipo}`:'');
       for(const[c,key]of [['B','categoria'],['C','apellidos'],['F','nombre_pila'],['H','dni'],['J','cp']]){
         const value=e?(key==='apellidos'?name(e):e[key]||''):'';
-        v(s,`${c}${r+490}`,value);f(s,`${c}${r}`,value,`IF($E$4="5º",${c}${r+490},"")`);
+        // Excel coerces a reference to an empty source cell to numeric zero.
+        // Guard the source explicitly so unused template rows stay empty and
+        // are not counted as additional members when Excel recalculates.
+        const source=`${c}${r+490}`;
+        v(s,source,value);f(s,`${c}${r}`,value,`IF(AND($E$4="5º",${source}<>""),${source},"")`);
       }
       v(s,`K${r}`,e?.reason||'');v(s,`M${r}`,'');
       const full=e?`${name(e)}, ${first(e)}`:'';
@@ -122,8 +151,25 @@
       if(on){f(b,`${column(c)}12`,value,c===5?'$I$7':`${column(c-1)}12+1`);f(b,`${column(c)}11`,day,`CHOOSE(WEEKDAY(${column(c)}12,2),"L","M","X","J","V","S","D")`);f(b,`${column(c)}10`,(weekday%7)+1,`WEEKDAY(${column(c)}12)`);}else for(const r of [10,11,12])v(b,`${column(c)}${r}`,'');
     }
     zip.file('xl/worksheets/sheet1.xml',s.toXML());zip.file('xl/worksheets/sheet2.xml',b.toXML());zip.file('xl/worksheets/sheet10.xml',d.toXML());
-    let workbook=await zip.file('xl/workbook.xml').async('string');workbook=workbook.replace(/<(?:\w+:)?calcPr\b[^>]*\/>/g,'');
-    const pref=workbook.match(/<([\w]+:)?workbook\b/)[1]||'';workbook=workbook.replace(/<\/(?:\w+:)?workbook>/,`<${pref}calcPr calcMode="auto" fullCalcOnLoad="1" forceFullCalc="1"/></${pref}workbook>`);zip.file('xl/workbook.xml',workbook);
+    let workbook=await zip.file('xl/workbook.xml').async('string');
+    const pref=workbook.match(/<([\w]+:)?workbook\b/)[1]||'';
+    const calculation=`<${pref}calcPr calcMode="auto" fullCalcOnLoad="1" forceFullCalc="1"/>`;
+    // Keep calcPr in its schema position, before extLst. Excel rebuilds the
+    // calculation chain because this export replaces formulas from the template.
+    const calcPattern=/<(?:\w+:)?calcPr\b[^>]*?(?:\/>|>[\s\S]*?<\/(?:\w+:)?calcPr>)/;
+    if(calcPattern.test(workbook))workbook=workbook.replace(calcPattern,()=>calculation);
+    else workbook=workbook.replace(/<(?:\w+:)?(?:oleSize|customWorkbookViews|pivotCaches|smartTagPr|smartTagTypes|webPublishing|fileRecoveryPr|webPublishObjects|extLst)\b|<\/(?:\w+:)?workbook>/,match=>calculation+match);
+    zip.file('xl/workbook.xml',workbook);
+    zip.remove('xl/calcChain.xml');
+    const relsPath='xl/_rels/workbook.xml.rels';
+    zip.file(relsPath,(await zip.file(relsPath).async('string')).replace(/<(?:\w+:)?Relationship\b(?=[^>]*\bType="[^"]*\/calcChain")[^>]*\/>/g,''));
+    const typesPath='[Content_Types].xml';
+    zip.file(typesPath,(await zip.file(typesPath).async('string')).replace(/<(?:\w+:)?Override\b(?=[^>]*\bPartName="\/xl\/calcChain.xml")[^>]*\/>/g,''));
+    for (const name of Object.keys(zip.files).filter(name => name.endsWith('.xml'))) {
+      const original = await zip.file(name).async('string');
+      const compatible = restoreCompatibilityNamespaces(original);
+      if (compatible !== original) zip.file(name, compatible);
+    }
     // The template's hour cells inherit General; use a true numeric Excel time format.
     const bytes=await zip.generateAsync({type:'uint8array',compression:'DEFLATE'});
     return {bytes,plan:p,filename:`Control de salida ${commission.localidad} ${commission.fecha_inicio} al ${commission.fecha_fin}.xlsx`};

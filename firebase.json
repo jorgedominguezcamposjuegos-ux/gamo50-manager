@@ -23,7 +23,9 @@
       ".git/**",
       "**/.*",
       "**/node_modules/**",
-      "tests/**"
+      "tests/**",
+      "AGENTS.md",
+      "docs/**"
     ],
     "cleanUrls": true
   }
