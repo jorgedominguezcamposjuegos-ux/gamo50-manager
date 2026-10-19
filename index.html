@@ -40,6 +40,7 @@
 
   <!-- Validation functions -->
   <script src="js/validation.js"></script>
+  <script src="js/permisos-compartidos.js?v=20261019-v2"></script>
   <script src="js/jszip.min.js"></script>
   <script src="js/control-salida.js?v=20261017-numericos"></script>
 
@@ -174,6 +175,34 @@
       { valor: 'CSA', etiqueta: 'CSA (Comisión como agregado)' },
       { valor: 'OT', etiqueta: 'OT (Otros)' }
     ];
+
+    function CamposEjercicioPermiso({ valor, onChange, disabled }) {
+      if (!['AP', 'VA'].includes(valor.tipo)) return null;
+      const year = Number(valor.fecha_inicio?.slice(0, 4)) || new Date().getFullYear();
+      const years = [...new Set([2026, 2027, year - 1, year, Number(valor.ejercicio) || year])].sort();
+      const change = patch => onChange({ ...valor, ...patch });
+      return <Box sx={{ mt: 2 }}>
+        <FormControl fullWidth margin="dense" size="small" disabled={disabled}>
+          <InputLabel>Año de cargo</InputLabel>
+          <Select label="Año de cargo" value={valor.ejercicio || ''} onChange={e => change({ ejercicio: Number(e.target.value) })} required>
+            {years.map(y => <MenuItem value={y} key={y}>{y}</MenuItem>)}
+          </Select>
+        </FormControl>
+        <Box component="label" display="flex" alignItems="center" gap={1} sx={{ my: 1, fontSize: 13 }}>
+          <input type="checkbox" checked={!!valor.repartir} onChange={e => change({ repartir: e.target.checked })} disabled={disabled} />Repartir entre dos ejercicios
+        </Box>
+        {valor.repartir && <>
+          <TextField fullWidth margin="dense" size="small" label="Primer día del segundo ejercicio" type="date" InputLabelProps={{ shrink: true }} value={valor.corte || ''} onChange={e => change({ corte: e.target.value })} required disabled={disabled} />
+          <FormControl fullWidth margin="dense" size="small" disabled={disabled}>
+            <InputLabel>Segundo año de cargo</InputLabel>
+            <Select label="Segundo año de cargo" value={valor.ejercicio2 || ''} onChange={e => change({ ejercicio2: Number(e.target.value) })} required>
+              {years.filter(y => y !== Number(valor.ejercicio)).map(y => <MenuItem value={y} key={y}>{y}</MenuItem>)}
+            </Select>
+          </FormControl>
+        </>}
+        <Typography variant="caption" color="text.secondary">El año de cargo no es necesariamente el de disfrute. No se calculan saldos personales.</Typography>
+      </Box>;
+    }
 
     function formatearFecha(valor) {
       if (!valor) return '';
@@ -315,6 +344,8 @@
 
       const [snackbar, setSnackbar] = React.useState({ open: false, message: '', severity: 'success' });
       const [confirmDialog, setConfirmDialog] = React.useState(null);
+      const [guardandoPermiso, setGuardandoPermiso] = React.useState(false);
+      const guardandoPermisoRef = React.useRef(false);
 
       const [comisiones, setComisiones] = React.useState([]);
       const [selectedComisionId, setSelectedComisionId] = React.useState('');
@@ -474,14 +505,9 @@
           const fin = fechaClave(p.fecha_fin);
           return p.policia_id === empleado.id && fechaDia >= inicio && fechaDia <= fin;
         });
-        if (permiso) return { 
-          id: permiso.id, 
-          policia_id: permiso.policia_id,
-          tipo: permiso.tipo, 
-          fecha_inicio: permiso.fecha_inicio,
-          fecha_fin: permiso.fecha_fin,
-          esPermiso: true 
-        };
+        // Conservar también ejercicio, fechas solicitadas y revisión para que
+        // editar desde un calendario no pierda metadatos ni use versión cero.
+        if (permiso) return { ...permiso, esPermiso: true };
 
         // Verificar si está activo
         if (!isAgentActiveOnDate(empleado.nombre, new Date(`${fechaDia}T00:00:00`))) {
@@ -625,6 +651,18 @@
         checkFirebase();
       }, []);
 
+      React.useEffect(() => {
+        if (!data || !window.firebaseInitialized) return;
+        return window.PermisosSincronizacion.escuchar(window.firebaseDB, permisos => {
+          setData(actual => actual ? { ...actual, permisos } : actual);
+        }, () => setSnackbar({ open: true, message: 'La sincronización de permisos está interrumpida. Comprueba la conexión antes de gestionar permisos.', severity: 'warning' }));
+      }, [!!data]);
+
+      React.useEffect(() => {
+        if (!data || fechaConsultaInicio > fechaConsultaFin) return;
+        setDisponibilidad(actual => actual ? getDisponibilidad(data, fechaConsultaInicio, fechaConsultaFin) : actual);
+      }, [data, fechaConsultaInicio, fechaConsultaFin]);
+
       const initializeFirebase = async () => {
         try {
           if (!window.firebaseInitialized) {
@@ -651,20 +689,13 @@
           console.log('📦 Cargando efectivos...');
           const efectivosSnapshot = await db.collection('efectivos').get();
           console.log('✅ Efectivos snapshot:', efectivosSnapshot.size, 'documentos');
-          const efectivos = efectivosSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+          const efectivos = efectivosSnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
           
           // Fetch permisos
           console.log('📦 Cargando permisos...');
           const permisosSnapshot = await db.collection('permisos').get();
           console.log('✅ Permisos snapshot:', permisosSnapshot.size, 'documentos');
-          let permisos = permisosSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-          
-          // Filtrar permisos eliminados (localStorage)
-          const eliminados = JSON.parse(localStorage.getItem('permisosEliminados') || '[]');
-          if (eliminados.length > 0) {
-            console.log('🗑️ Filtrando permisos eliminados:', eliminados);
-            permisos = permisos.filter(p => !eliminados.includes(p.id));
-          }
+          const permisos = permisosSnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
           
           // Fetch comisiones
           console.log('📦 Cargando comisiones...');
@@ -715,6 +746,7 @@
           }
           
           setLoading(false);
+          return { efectivos, permisos, comisiones_servicio: comisionesData };
         } catch (error) {
           console.error('❌ Error cargando datos desde Firebase:', error);
           console.log('🔄 Intentando cargar datos del archivo local...');
@@ -770,299 +802,71 @@
         }
       };
 
-      const handleFormSubmit = async (e, force = false) => {
-        if (e) e.preventDefault();
-        
-        // Validar que todos los campos estén presentes
-        if (!formData.policia_id || !formData.fecha_inicio || !formData.fecha_fin) {
-          setSnackbar({ open: true, message: 'Por favor, complete todos los campos del formulario', severity: 'error' });
-          return;
-        }
-        
-        console.log('Form data:', formData);
-        
+      const guardarFormularioPermiso = async (form, force, alGuardar) => {
+        if (guardandoPermisoRef.current) return;
+        guardandoPermisoRef.current = true; setGuardandoPermiso(true);
         try {
-          const warningResponse = checkPermisoQuotas(data, { ...formData, force });
-          
-          if (warningResponse && !force) {
-            setConfirmDialog({
-              title: "Aviso de Reglas",
-              text: warningResponse.message,
-              onConfirm: () => { setConfirmDialog(null); handleFormSubmit(null, true); }
-            });
-            return;
-          }
-          
-          const db = window.firebaseDB;
-          const nuevoPermiso = {
-            policia_id: formData.policia_id,
-            tipo: formData.tipo,
-            fecha_inicio: formData.fecha_inicio,
-            fecha_fin: formData.fecha_fin,
-            createdAt: firebase.firestore.FieldValue.serverTimestamp()
-          };
-          
-          await db.collection('permisos').add(nuevoPermiso);
-          
-          setSnackbar({ open: true, message: 'Permiso grabado', severity: 'success' });
-          setFormData({ policia_id: '', tipo: 'VA', fecha_inicio: '', fecha_fin: '' });
-          fetchData();
-          if (disponibilidad) consultarDisponibilidad();
+          await window.PermisosManual.guardar(window.firebaseDB, form, force);
+          alGuardar();
+          const actualizados = await fetchData();
+          if (disponibilidad && actualizados) setDisponibilidad(getDisponibilidad(actualizados, fechaConsultaInicio, fechaConsultaFin));
+          setSnackbar({ open: true, message: 'Permiso guardado en Firebase', severity: 'success' });
         } catch (error) {
-          console.error('Error guardando permiso:', error);
-          setSnackbar({ open: true, message: 'Error guardando permiso: ' + error.message, severity: 'error' });
-        }
+          if (error.code === 'G50_AVISO') {
+            setConfirmDialog({ title: 'Aviso de reglas', text: error.message,
+              onConfirm: () => { setConfirmDialog(null); guardarFormularioPermiso(form, true, alGuardar); } });
+          } else setSnackbar({ open: true, message: 'No se ha confirmado el guardado: ' + error.message, severity: 'error' });
+        } finally { guardandoPermisoRef.current = false; setGuardandoPermiso(false); }
       };
 
-      const handleDeletePermiso = async (id) => {
-        console.log('🗑️ Intentando eliminar permiso con ID:', id);
-        if (!window.confirm("¿Seguro que deseas eliminar este permiso?")) return;
-        
-        try {
-          // Guardar el ID eliminado en localStorage para persistencia
-          const eliminados = JSON.parse(localStorage.getItem('permisosEliminados') || '[]');
-          if (!eliminados.includes(id)) {
-            eliminados.push(id);
-            localStorage.setItem('permisosEliminados', JSON.stringify(eliminados));
-          }
-          
-          // Eliminar del estado local inmediatamente para que desaparezca de la UI
-          setData(prev => {
-            console.log('📊 Permisos antes de eliminar:', prev.permisos.length);
-            const nuevosPermisos = prev.permisos.filter(p => p.id !== id);
-            console.log('📊 Permisos después de eliminar:', nuevosPermisos.length);
-            return {
-              ...prev,
-              permisos: nuevosPermisos
-            };
-          });
-          
-          // Intentar eliminar de Firebase si está disponible
-          if (window.firebaseDB) {
-            const db = window.firebaseDB;
-            await db.collection('permisos').doc(id).delete();
-            setSnackbar({ open: true, message: 'Permiso eliminado', severity: 'success' });
-          } else {
-            setSnackbar({ open: true, message: 'Permiso eliminado localmente (Firebase no disponible)', severity: 'warning' });
-          }
-          
-          if (disponibilidad) consultarDisponibilidad();
-        } catch (error) {
-          console.error('Error eliminando permiso:', error);
-          setSnackbar({ open: true, message: 'Permiso eliminado localmente (error en Firebase)', severity: 'warning' });
-          // NO recargar datos - el permiso ya se eliminó de la UI local
-        }
+      const handleFormSubmit = (e, force = false) => {
+        if (e) e.preventDefault();
+        return guardarFormularioPermiso(formData, force, () => setFormData({ policia_id: '', tipo: 'VA', fecha_inicio: '', fecha_fin: '', ejercicio: '' }));
       };
+
+      const eliminarPermisoGuardado = async (permiso, alEliminar = () => {}) => {
+        if (guardandoPermisoRef.current || !permiso?.id) return;
+        if (!window.confirm('¿Seguro que deseas eliminar este permiso?')) return;
+        guardandoPermisoRef.current = true; setGuardandoPermiso(true);
+        try {
+          await window.PermisosManual.eliminar(window.firebaseDB, permiso);
+          alEliminar();
+          const actualizados = await fetchData();
+          if (disponibilidad && actualizados) setDisponibilidad(getDisponibilidad(actualizados, fechaConsultaInicio, fechaConsultaFin));
+          setSnackbar({ open: true, message: 'Permiso eliminado de Firebase', severity: 'success' });
+        } catch (error) {
+          setSnackbar({ open: true, message: 'No se ha confirmado la eliminación: ' + error.message + '. El permiso no se oculta localmente.', severity: 'error' });
+        } finally { guardandoPermisoRef.current = false; setGuardandoPermiso(false); }
+      };
+
+      const handleDeletePermiso = id => eliminarPermisoGuardado(data.permisos.find(p => p.id === id));
 
       const handleDayClick = (dayStr, currentPermiso) => {
-        if (currentPermiso && currentPermiso.tipo === 'CS') return;
-        if (currentPermiso) {
-          setCalendarFormData({ ...currentPermiso });
-        } else {
-          setCalendarFormData({ id: '', policia_id: consultaAgenteId, tipo: 'VA', fecha_inicio: dayStr, fecha_fin: dayStr });
-        }
-        setDialogPermisoCalendar(true);
+        if (currentPermiso?.tipo === 'CS') return;
+        try {
+          setCalendarFormData(currentPermiso ? window.PermisosManual.edicion(currentPermiso) : { id: '', policia_id: consultaAgenteId, tipo: 'VA', fecha_inicio: dayStr, fecha_fin: dayStr, ejercicio: '' });
+          setDialogPermisoCalendar(true);
+        } catch (error) { setSnackbar({ open: true, message: error.message, severity: 'error' }); }
       };
 
       const handleBloqueDayClick = (empleado, dayStr, currentPermiso) => {
-        if (currentPermiso && currentPermiso.tipo === 'CS') return;
-        if (currentPermiso) {
-          setBloqueFormData({ ...currentPermiso });
-        } else {
-          setBloqueFormData({ id: '', policia_id: empleado.id, tipo: 'VA', fecha_inicio: dayStr, fecha_fin: dayStr });
-        }
-        setDialogPermisoBloque(true);
+        if (currentPermiso?.tipo === 'CS') return;
+        try {
+          setBloqueFormData(currentPermiso ? window.PermisosManual.edicion(currentPermiso) : { id: '', policia_id: empleado.id, tipo: 'VA', fecha_inicio: dayStr, fecha_fin: dayStr, ejercicio: '' });
+          setDialogPermisoBloque(true);
+        } catch (error) { setSnackbar({ open: true, message: error.message, severity: 'error' }); }
       };
 
-      const handleBloqueSubmit = async (e, force = false) => {
+      const handleBloqueSubmit = (e, force = false) => {
         if (e) e.preventDefault();
-        try {
-          const warningResponse = checkPermisoQuotas(data, { ...bloqueFormData, force });
-          
-          if (warningResponse && !force) {
-            setConfirmDialog({
-              title: "Aviso de Reglas",
-              text: warningResponse.message,
-              onConfirm: () => { setConfirmDialog(null); handleBloqueSubmit(null, true); }
-            });
-            return;
-          }
-          
-          const db = window.firebaseDB;
-          console.log('🔍 Datos del formulario:', bloqueFormData);
-          console.log('🔍 ID del permiso:', bloqueFormData.id);
-          
-          const permisoData = {
-            policia_id: bloqueFormData.policia_id,
-            tipo: bloqueFormData.tipo,
-            fecha_inicio: bloqueFormData.fecha_inicio,
-            fecha_fin: bloqueFormData.fecha_fin
-          };
-          
-          if (bloqueFormData.id) {
-            console.log('🔄 Intentando actualizar permiso existente con ID:', bloqueFormData.id);
-            console.log('📝 Datos a actualizar:', permisoData);
-            
-            // Verificar que el ID sea válido
-            if (!bloqueFormData.id || typeof bloqueFormData.id !== 'string' || bloqueFormData.id.trim() === '') {
-              console.error('❌ ID del permiso inválido:', bloqueFormData.id);
-              throw new Error('ID del permiso inválido o vacío');
-            }
-            
-            try {
-              // Verificar si el documento existe antes de actualizar
-              const docRef = db.collection('permisos').doc(bloqueFormData.id);
-              const docSnapshot = await docRef.get();
-              
-              if (docSnapshot.exists) {
-                console.log('📄 Documento existe, procediendo a actualizar');
-                await docRef.update(permisoData);
-                console.log('✅ Permiso actualizado correctamente');
-              } else {
-                console.log('⚠️ Documento no existe, creando nuevo documento con el mismo ID');
-                permisoData.createdAt = firebase.firestore.FieldValue.serverTimestamp();
-                await docRef.set(permisoData);
-                console.log('✅ Nuevo permiso creado con ID existente');
-              }
-            } catch (updateError) {
-              console.error('❌ Error específico en update/create:', updateError);
-              console.error('Código de error:', updateError.code);
-              console.error('Mensaje de error:', updateError.message);
-              throw updateError;
-            }
-          } else {
-            console.log('➕ Creando nuevo permiso');
-            permisoData.createdAt = firebase.firestore.FieldValue.serverTimestamp();
-            await db.collection('permisos').add(permisoData);
-            console.log('✅ Nuevo permiso creado correctamente');
-          }
-          
-          setSnackbar({ open: true, message: 'Permiso guardado', severity: 'success' });
-          setDialogPermisoBloque(false);
-          fetchData();
-        } catch (error) {
-          console.error('❌ Error guardando permiso:', error);
-          console.error('Detalles completos del error:', {
-            code: error.code,
-            message: error.message,
-            stack: error.stack
-          });
-          setSnackbar({ 
-            open: true, 
-            message: `Error guardando permiso: ${error.message || 'Error desconocido'}`, 
-            severity: 'error' 
-          });
-        }
+        return guardarFormularioPermiso(bloqueFormData, force, () => setDialogPermisoBloque(false));
       };
-
-      const handleDeletePermisoBloque = async () => {
-        if (!window.confirm("¿Seguro que deseas eliminar este permiso?")) return;
-        try {
-          const db = window.firebaseDB;
-          await db.collection('permisos').doc(bloqueFormData.id).delete();
-          setSnackbar({ open: true, message: 'Permiso eliminado', severity: 'success' });
-          setDialogPermisoBloque(false);
-          fetchData();
-        } catch (error) {
-          console.error('Error eliminando permiso:', error);
-          setSnackbar({ open: true, message: 'Error eliminando permiso', severity: 'error' });
-        }
-      };
-
-      const handleCalendarSubmit = async (e, force = false) => {
+      const handleDeletePermisoBloque = () => eliminarPermisoGuardado(bloqueFormData, () => setDialogPermisoBloque(false));
+      const handleCalendarSubmit = (e, force = false) => {
         if (e) e.preventDefault();
-        try {
-          const warningResponse = checkPermisoQuotas(data, { ...calendarFormData, force });
-          
-          if (warningResponse && !force) {
-            setConfirmDialog({
-              title: "Aviso de Reglas",
-              text: warningResponse.message,
-              onConfirm: () => { setConfirmDialog(null); handleCalendarSubmit(null, true); }
-            });
-            return;
-          }
-          
-          const db = window.firebaseDB;
-          console.log('🔍 Datos del formulario calendario:', calendarFormData);
-          console.log('🔍 ID del permiso calendario:', calendarFormData.id);
-          
-          const permisoData = {
-            policia_id: calendarFormData.policia_id,
-            tipo: calendarFormData.tipo,
-            fecha_inicio: calendarFormData.fecha_inicio,
-            fecha_fin: calendarFormData.fecha_fin
-          };
-          
-          if (calendarFormData.id) {
-            console.log('🔄 Intentando actualizar permiso existente con ID:', calendarFormData.id);
-            console.log('📝 Datos a actualizar:', permisoData);
-            
-            // Verificar que el ID sea válido
-            if (!calendarFormData.id || typeof calendarFormData.id !== 'string' || calendarFormData.id.trim() === '') {
-              console.error('❌ ID del permiso inválido:', calendarFormData.id);
-              throw new Error('ID del permiso inválido o vacío');
-            }
-            
-            try {
-              // Verificar si el documento existe antes de actualizar
-              const docRef = db.collection('permisos').doc(calendarFormData.id);
-              const docSnapshot = await docRef.get();
-              
-              if (docSnapshot.exists) {
-                console.log('📄 Documento existe, procediendo a actualizar');
-                await docRef.update(permisoData);
-                console.log('✅ Permiso actualizado correctamente');
-              } else {
-                console.log('⚠️ Documento no existe, creando nuevo documento con el mismo ID');
-                permisoData.createdAt = firebase.firestore.FieldValue.serverTimestamp();
-                await docRef.set(permisoData);
-                console.log('✅ Nuevo permiso creado con ID existente');
-              }
-            } catch (updateError) {
-              console.error('❌ Error específico en update/create:', updateError);
-              console.error('Código de error:', updateError.code);
-              console.error('Mensaje de error:', updateError.message);
-              throw updateError;
-            }
-          } else {
-            console.log('➕ Creando nuevo permiso');
-            permisoData.createdAt = firebase.firestore.FieldValue.serverTimestamp();
-            await db.collection('permisos').add(permisoData);
-            console.log('✅ Nuevo permiso creado correctamente');
-          }
-          
-          setSnackbar({ open: true, message: 'Permiso guardado', severity: 'success' });
-          setDialogPermisoCalendar(false);
-          fetchData();
-        } catch (error) {
-          console.error('❌ Error guardando permiso:', error);
-          console.error('Detalles completos del error:', {
-            code: error.code,
-            message: error.message,
-            stack: error.stack
-          });
-          setSnackbar({ 
-            open: true, 
-            message: `Error guardando permiso: ${error.message || 'Error desconocido'}`, 
-            severity: 'error' 
-          });
-        }
+        return guardarFormularioPermiso(calendarFormData, force, () => setDialogPermisoCalendar(false));
       };
-
-      const handleDeletePermisoCalendar = async () => {
-        if (!window.confirm("¿Seguro que deseas eliminar este permiso?")) return;
-        try {
-          const db = window.firebaseDB;
-          await db.collection('permisos').doc(calendarFormData.id).delete();
-          setSnackbar({ open: true, message: 'Permiso eliminado', severity: 'success' });
-          setDialogPermisoCalendar(false);
-          fetchData();
-        } catch (error) {
-          console.error('Error eliminando permiso:', error);
-          setSnackbar({ open: true, message: 'Error eliminando permiso', severity: 'error' });
-        }
-      };
+      const handleDeletePermisoCalendar = () => eliminarPermisoGuardado(calendarFormData, () => setDialogPermisoCalendar(false));
 
       const fetchEfectivosComision = async (id) => {
         if (!id) return;
@@ -1149,18 +953,22 @@
         try {
           const db = window.firebaseDB;
           
-          for (const agente of agentesAEliminar) {
-            // Eliminar el agente de la colección efectivos
-            await db.collection('efectivos').doc(agente.id).delete();
-            
-            // Eliminar todos los permisos asociados a este agente
-            const permisosSnapshot = await db.collection('permisos').where('policia_id', '==', agente.id).get();
-            const batch = db.batch();
-            permisosSnapshot.docs.forEach(doc => {
-              batch.delete(doc.ref);
-            });
-            await batch.commit();
-          }
+          // También esta herramienta histórica debe respetar el mismo cerco:
+          // nunca borrar primero al integrante y dejar sus permisos huérfanos.
+          const controlRef = db.doc(window.PermisosCoordinacion.CONTROL);
+          const antes = await controlRef.get({ source: 'server' });
+          const version = window.PermisosCoordinacion.version(antes.exists ? antes.data() : null);
+          const pendientes = await Promise.all(agentesAEliminar.map(a => db.collection('permisos').where('policia_id', '==', a.id).get({ source: 'server' })));
+          const referencias = [...agentesAEliminar.map(a => db.collection('efectivos').doc(a.id)), ...pendientes.flatMap(s => s.docs.map(d => d.ref))];
+          if (referencias.length > 450) throw new Error('Esta baja requiere el procedimiento de mantenimiento de plantilla.');
+          await db.runTransaction(async tx => {
+            const actual = await tx.get(controlRef);
+            if (window.PermisosCoordinacion.version(actual.exists ? actual.data() : null) !== version) throw new Error('Han cambiado los permisos. Actualiza y vuelve a comprobar la baja.');
+            const registros = [];
+            for (const ref of referencias) registros.push(await tx.get(ref));
+            registros.forEach((registro, i) => { if (registro.exists) tx.delete(referencias[i]); });
+            tx.update(controlRef, { version: version + 1, actualizado: firebase.firestore.FieldValue.serverTimestamp() });
+          });
 
           setSnackbar({ open: true, message: 'Agentes eliminados correctamente de Firebase', severity: 'success' });
           fetchData();
@@ -1822,7 +1630,8 @@
                       </FormControl>
                       <TextField fullWidth margin="normal" label="Fecha Inicio" type="date" InputLabelProps={{ shrink: true }} inputProps={{ lang: 'es-ES' }} value={formData.fecha_inicio} onChange={(e) => setFormData({...formData, fecha_inicio: e.target.value})} required />
                       <TextField fullWidth margin="normal" label="Fecha Fin" type="date" InputLabelProps={{ shrink: true }} inputProps={{ lang: 'es-ES' }} value={formData.fecha_fin} onChange={(e) => setFormData({...formData, fecha_fin: e.target.value})} required />
-                      <Button type="submit" variant="contained" fullWidth sx={{ mt: 3, py: 1.5 }} disableElevation>Registrar Permiso</Button>
+                      <CamposEjercicioPermiso valor={formData} onChange={setFormData} disabled={guardandoPermiso} />
+                      <Button type="submit" variant="contained" fullWidth sx={{ mt: 3, py: 1.5 }} disabled={guardandoPermiso} disableElevation>{guardandoPermiso ? 'Guardando…' : 'Registrar Permiso'}</Button>
                     </form>
                   </Paper>
                 </Grid>
@@ -2521,12 +2330,13 @@
                   </FormControl>
                   <TextField fullWidth margin="dense" label="Fecha Inicio" type="date" InputLabelProps={{ shrink: true }} inputProps={{ lang: 'es-ES' }} value={calendarFormData.fecha_inicio} onChange={(e) => setCalendarFormData({...calendarFormData, fecha_inicio: e.target.value})} required sx={{ mt: 2 }}/>
                   <TextField fullWidth margin="dense" label="Fecha Fin" type="date" InputLabelProps={{ shrink: true }} inputProps={{ lang: 'es-ES' }} value={calendarFormData.fecha_fin} onChange={(e) => setCalendarFormData({...calendarFormData, fecha_fin: e.target.value})} required sx={{ mt: 2 }}/>
+                  <CamposEjercicioPermiso valor={calendarFormData} onChange={setCalendarFormData} disabled={guardandoPermiso} />
                 </DialogContent>
                 <DialogActions>
-                  {calendarFormData.id && <Button color="error" onClick={handleDeletePermisoCalendar}>Eliminar</Button>}
+                  {calendarFormData.id && <Button color="error" onClick={handleDeletePermisoCalendar} disabled={guardandoPermiso}>Eliminar</Button>}
                   <Box flexGrow={1} />
                   <Button onClick={() => setDialogPermisoCalendar(false)}>Cancelar</Button>
-                  <Button type="submit" variant="contained" color="primary">Guardar</Button>
+                  <Button type="submit" variant="contained" color="primary" disabled={guardandoPermiso}>{guardandoPermiso ? 'Guardando…' : 'Guardar'}</Button>
                 </DialogActions>
               </form>
             </Dialog>
@@ -2543,11 +2353,12 @@
                   </FormControl>
                   <TextField fullWidth margin="dense" label="Fecha Inicio" type="date" InputLabelProps={{ shrink: true }} inputProps={{ lang: 'es-ES' }} value={bloqueFormData.fecha_inicio} onChange={(e) => setBloqueFormData({...bloqueFormData, fecha_inicio: e.target.value})} required sx={{ mt: 2 }}/>
                   <TextField fullWidth margin="dense" label="Fecha Fin" type="date" InputLabelProps={{ shrink: true }} inputProps={{ lang: 'es-ES' }} value={bloqueFormData.fecha_fin} onChange={(e) => setBloqueFormData({...bloqueFormData, fecha_fin: e.target.value})} required sx={{ mt: 2 }}/>
+                  <CamposEjercicioPermiso valor={bloqueFormData} onChange={setBloqueFormData} disabled={guardandoPermiso} />
                 </DialogContent>
                 <DialogActions>
                   <Button onClick={() => setDialogPermisoBloque(false)}>Cancelar</Button>
-                  {bloqueFormData.id && <Button color="error" variant="outlined" onClick={(e) => { e.preventDefault(); handleDeletePermisoBloque(); }}>Eliminar Permiso Completo</Button>}
-                  <Button type="submit" variant="contained" color="primary">Guardar</Button>
+                  {bloqueFormData.id && <Button color="error" variant="outlined" disabled={guardandoPermiso} onClick={(e) => { e.preventDefault(); handleDeletePermisoBloque(); }}>Eliminar Permiso Completo</Button>}
+                  <Button type="submit" variant="contained" color="primary" disabled={guardandoPermiso}>{guardandoPermiso ? 'Guardando…' : 'Guardar'}</Button>
                 </DialogActions>
               </form>
             </Dialog>
