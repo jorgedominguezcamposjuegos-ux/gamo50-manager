@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Solicitar permiso · G50</title><meta name="g50-permisos-endpoint" content="https://script.google.com/macros/s/AKfycbzDwNkr7Wf1sVOhx-qtLROUeu27ujdTVO00y4lRS2aO6jWOXmpKiAwrU0Lx88qVw78U/exec"><link rel="stylesheet" href="estilos.css"><script defer src="formulario.js"></script></head>
+<body><main>
+  <header><p class="eyebrow">GAMO 50</p><h1>Solicitud de permisos</h1><p>Selecciona las opciones. No necesitas redactar un correo.</p></header>
+  <div class="aviso" id="aviso">Conectando con el sistema de permisos. Las solicitudes se revisan a las 08:00 y 21:00, hora peninsular española.</div>
+  <section class="panel"><form id="solicitud">
+    <fieldset class="opciones"><legend>¿Qué quieres hacer?</legend><label><input type="radio" name="action" value="SOLICITAR" checked>Solicitar permiso</label><label><input type="radio" name="action" value="MODIFICAR">Modificar solicitud</label><label><input type="radio" name="action" value="CANCELAR">Cancelar solicitud</label></fieldset>
+    <label for="persona">Nombre, apellidos e indicativo</label><select id="persona" required disabled><option value="">Cargando integrantes…</option></select>
+    <label for="email">Correo donde recibirías la respuesta</label><input type="email" id="email" autocomplete="email" placeholder="Tu dirección de correo" required maxlength="254">
+    <div id="referencia-campo" hidden><label for="referencia">Referencia de la solicitud original</label><input id="referencia" placeholder="G50-00001" maxlength="30"><p class="ayuda">La encontrarás en la respuesta de la revisión. No es el número de recibo REC.</p></div>
+    <fieldset id="datos"><legend>Permiso</legend>
+      <fieldset class="opciones"><legend>Tipo</legend><label><input type="radio" name="type" value="AP" checked>AP · Asuntos particulares</label><label><input type="radio" name="type" value="VA">VA · Vacaciones</label></fieldset>
+      <div class="dos-columnas"><div><label for="inicio">Primer día</label><input id="inicio" type="date" required></div><div><label for="fin">Último día</label><input id="fin" type="date" required></div></div>
+      <label for="ejercicio">Año al que se descuentan</label><select id="ejercicio" required></select>
+      <label class="marcar"><input id="repartir" type="checkbox">Repartir el permiso entre dos años</label>
+      <div id="segundo-tramo" hidden><label for="corte">Primer día que se carga al otro año</label><input id="corte" type="date"><label for="ejercicio2">Año del segundo tramo</label><select id="ejercicio2"></select><p class="ayuda">El primer tramo acaba el día anterior al corte; el segundo continúa hasta el último día del permiso.</p></div>
+      <p class="ayuda" id="nota">VA de varios días: inicio y fin hábiles. Las reglas y los cupos se comprueban en la revisión.</p>
+    </fieldset>
+    <p class="ayuda">La fecha y hora de envío se registran automáticamente. Enviar una solicitud no significa que esté concedida.</p>
+    <button id="enviar" type="submit" disabled>Enviar solicitud</button>
+    <div id="resultado" role="status" aria-live="polite"></div>
+    <button id="otra" class="secundario" type="button" hidden>Preparar otra solicitud</button>
+  </form></section>
+  <footer>AP y VA · No hay concesión hasta recibir la respuesta de la revisión.</footer>
+</main></body></html>
