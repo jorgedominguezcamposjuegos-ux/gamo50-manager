@@ -298,15 +298,6 @@
       "en_funciones": false
     },
     {
-      "id": "diego_garcia",
-      "nombre": "Diego García-Valenzuela Herrera",
-      "categoria": "Policía",
-      "so": "57",
-      "equipo": "58",
-      "funcion": "Componente",
-      "en_funciones": false
-    },
-    {
       "id": "jose_arcos",
       "nombre": "José Antonio Arcos Ureña",
       "categoria": "Policía",
@@ -415,20 +406,6 @@
       "fecha_inicio": "2026-08-03",
       "fecha_fin": "2026-09-01",
       "id": "e59cbfb7-5d20-468d-b1b8-052c9396a176"
-    },
-    {
-      "policia_id": "diego_garcia",
-      "tipo": "VA",
-      "fecha_inicio": "2026-07-01",
-      "fecha_fin": "2026-07-12",
-      "id": "e75ad735-aee3-4874-aa20-e60988892ea5"
-    },
-    {
-      "policia_id": "diego_garcia",
-      "tipo": "VA",
-      "fecha_inicio": "2026-08-03",
-      "fecha_fin": "2026-08-24",
-      "id": "a0d1de37-1fde-4429-ad67-979aaf056499"
     },
     {
       "policia_id": "jose_guardiola",
@@ -758,13 +735,6 @@
       "fecha_inicio": "2026-06-20",
       "fecha_fin": "2026-06-20",
       "id": "7b407cc0-3811-4bfa-9d81-aa85cbaf86ee"
-    },
-    {
-      "policia_id": "diego_garcia",
-      "tipo": "AP",
-      "fecha_inicio": "2026-06-21",
-      "fecha_fin": "2026-06-21",
-      "id": "bf55d389-2800-4733-97c1-debd03c683c4"
     },
     {
       "policia_id": "francisco_martinez",
