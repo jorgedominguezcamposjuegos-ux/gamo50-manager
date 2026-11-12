@@ -253,15 +253,6 @@
       "en_funciones": true
     },
     {
-      "id": "sergio_cabrera",
-      "nombre": "Sergio Cabrera García",
-      "categoria": "Oficial",
-      "so": "57",
-      "equipo": "58",
-      "funcion": "JEO",
-      "en_funciones": false
-    },
-    {
       "id": "alberto_perez",
       "nombre": "Alberto Jesús Pérez González",
       "categoria": "Policía",
@@ -364,13 +355,6 @@
       "fecha_inicio": "2026-07-21",
       "fecha_fin": "2026-08-23",
       "id": "34b3d657-4e36-4fb7-917e-1cfe266b013e"
-    },
-    {
-      "policia_id": "sergio_cabrera",
-      "tipo": "VA",
-      "fecha_inicio": "2026-08-07",
-      "fecha_fin": "2026-08-23",
-      "id": "8fc77b7b-5fa2-4e51-9bd5-8df06d9cea3d"
     },
     {
       "policia_id": "miguel_criado",
