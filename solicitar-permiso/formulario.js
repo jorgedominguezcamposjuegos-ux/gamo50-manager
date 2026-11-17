@@ -31,14 +31,24 @@
     const result = await response.json(); if (!response.ok) throw new Error(result.error || 'No se ha podido registrar.'); return result;
   }
   function day(iso, n) { const d = new Date(iso + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); }
+  function calendarDays(start, end) { if (!start || !end || end < start) return 0; return Math.round((Date.parse(end + 'T00:00:00Z') - Date.parse(start + 'T00:00:00Z')) / 86400000) + 1; }
   function update() {
     const cancel = action() === 'CANCELAR', split = $('repartir').checked;
+    const type = document.querySelector('[name=type]:checked').value, count = calendarDays($('inicio').value, $('fin').value);
+    const looseEligible = type === 'VA' && count >= 1 && count <= 5, oneDay = looseEligible && count === 1;
     $('referencia-campo').hidden = action() === 'SOLICITAR'; $('referencia').required = action() !== 'SOLICITAR';
     $('datos').hidden = cancel; $('datos').disabled = cancel;
     $('segundo-tramo').hidden = !split;
     for (const id of ['corte', 'ejercicio2']) { $(id).required = split && !cancel; $(id).disabled = !split; }
     $('fin').min = $('inicio').value;
     $('corte').min = $('inicio').value ? day($('inicio').value, 1) : ''; $('corte').max = $('fin').value;
+    $('va-suelta-contenedor').hidden = !looseEligible || cancel;
+    $('va-suelta').disabled = !looseEligible || oneDay || cancel;
+    if (oneDay) $('va-suelta').checked = true;
+    else if (!looseEligible || type !== 'VA') $('va-suelta').checked = false;
+    $('va-suelta-ayuda').textContent = oneDay
+      ? 'Una VA de un solo día ya se contabiliza automáticamente como día suelto: consume 1 día de VA y 1 del máximo anual de cinco.'
+      : `Marcado: cada fecha del periodo cuenta como un día suelto de VA, aunque sea fin de semana o festivo. Consume ${count} días de VA y ${count} del máximo anual de cinco.`;
   }
   $('solicitud').addEventListener('change', update);
   $('solicitud').addEventListener('submit', async event => {
@@ -49,6 +59,7 @@
       if (action() !== 'SOLICITAR') payload.reference = $('referencia').value.trim();
       if (action() !== 'CANCELAR') {
         payload.type = document.querySelector('[name=type]:checked').value;
+        payload.looseVacation = payload.type === 'VA' && $('va-suelta').checked;
         payload.segments = [{ exercise: Number($('ejercicio').value), start: $('inicio').value, end: $('fin').value }];
         if ($('repartir').checked) {
           const cut = $('corte').value;

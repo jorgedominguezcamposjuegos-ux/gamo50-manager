@@ -14,6 +14,7 @@
       <label for="ejercicio">Año al que se descuentan</label><select id="ejercicio" required></select>
       <label class="marcar"><input id="repartir" type="checkbox">Repartir el permiso entre dos años</label>
       <div id="segundo-tramo" hidden><label for="corte">Primer día que se carga al otro año</label><input id="corte" type="date"><label for="ejercicio2">Año del segundo tramo</label><select id="ejercicio2"></select><p class="ayuda">El primer tramo acaba el día anterior al corte; el segundo continúa hasta el último día del permiso.</p></div>
+      <div id="va-suelta-contenedor" hidden><label class="marcar"><input id="va-suelta" type="checkbox">Contabilización como días sueltos de VA</label><p class="ayuda" id="va-suelta-ayuda">Marcado: cada día del periodo cuenta como un día suelto de VA, equivalente a un AP.</p></div>
       <p class="ayuda" id="nota">VA de varios días: inicio y fin hábiles. Las reglas y los cupos se comprueban en la revisión.</p>
     </fieldset>
     <p class="ayuda">La fecha y hora de envío se registran automáticamente. Enviar una solicitud no significa que esté concedida.</p>

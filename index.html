@@ -181,6 +181,10 @@
       const year = Number(valor.fecha_inicio?.slice(0, 4)) || new Date().getFullYear();
       const years = [...new Set([2026, 2027, year - 1, year, Number(valor.ejercicio) || year])].sort();
       const change = patch => onChange({ ...valor, ...patch });
+      const rangoDias = valor.fecha_inicio && valor.fecha_fin && valor.fecha_fin >= valor.fecha_inicio
+        ? Math.round((Date.parse(valor.fecha_fin + 'T00:00:00Z') - Date.parse(valor.fecha_inicio + 'T00:00:00Z')) / 86400000) + 1 : 0;
+      const opcionSueltasVA = valor.tipo === 'VA' && rangoDias >= 1 && rangoDias <= 5;
+      const VAUnDia = opcionSueltasVA && rangoDias === 1;
       return <Box sx={{ mt: 2 }}>
         <FormControl fullWidth margin="dense" size="small" disabled={disabled}>
           <InputLabel>Año de cargo</InputLabel>
@@ -200,6 +204,10 @@
             </Select>
           </FormControl>
         </>}
+        {opcionSueltasVA && <Box component="label" display="flex" alignItems="flex-start" gap={1} sx={{ mt: 1, fontSize: 13 }}>
+          <input type="checkbox" checked={VAUnDia || !!valor.looseVacation} onChange={e => change({ looseVacation: e.target.checked })} disabled={disabled || VAUnDia} />
+          <span><strong>Contabilización como días sueltos de VA</strong><br /><Typography component="span" variant="caption" color="text.secondary">{VAUnDia ? 'Una VA de un solo día ya se cuenta automáticamente como suelta.' : 'Si se marca, cada día del tramo consume VA y cuenta para el máximo anual de cinco, como un AP.'}</Typography></span>
+        </Box>}
         <Typography variant="caption" color="text.secondary">El año de cargo no es necesariamente el de disfrute. No se calculan saldos personales.</Typography>
       </Box>;
     }
@@ -821,7 +829,7 @@
 
       const handleFormSubmit = (e, force = false) => {
         if (e) e.preventDefault();
-        return guardarFormularioPermiso(formData, force, () => setFormData({ policia_id: '', tipo: 'VA', fecha_inicio: '', fecha_fin: '', ejercicio: '' }));
+        return guardarFormularioPermiso(formData, force, () => setFormData({ policia_id: '', tipo: 'VA', fecha_inicio: '', fecha_fin: '', ejercicio: '', looseVacation: false }));
       };
 
       const eliminarPermisoGuardado = async (permiso, alEliminar = () => {}) => {

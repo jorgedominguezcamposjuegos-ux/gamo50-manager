@@ -60,7 +60,7 @@
   function leerCorreo(body) {
     const fields = {}, segments = [];
     let current = null;
-    const general = { ACCION: 'action', 'NOMBRE Y APELLIDOS': 'nombre', INDICATIVO: 'indicativo', REFERENCIA: 'reference', 'TIPO DE PERMISO': 'type', 'TIPO DE PERMISO SOLICITADO': 'type' };
+    const general = { ACCION: 'action', 'NOMBRE Y APELLIDOS': 'nombre', INDICATIVO: 'indicativo', REFERENCIA: 'reference', 'TIPO DE PERMISO': 'type', 'TIPO DE PERMISO SOLICITADO': 'type', 'CONTABILIZACION COMO DIAS SUELTOS DE VA': 'looseVacation' };
     const tramo = { 'EJERCICIO DE CARGO': 'exercise', 'FECHA DE INICIO': 'start', 'FECHA DE FIN': 'end' };
     for (const raw of String(body || '').split(/\r?\n/)) {
       const line = raw.trim();
@@ -96,6 +96,10 @@
     }
     fields.type = normalizar(fields.type);
     if (!['AP', 'VA'].includes(fields.type)) fallo('DATOS', 'Solo se admiten AP y VA. El resto se gestiona manualmente.');
+    const looseAnswer = normalizar(fields.looseVacation || 'NO');
+    if (!['SI', 'NO'].includes(looseAnswer)) fallo('DATOS', 'Indica Sí o No en la contabilización como días sueltos de VA.');
+    fields.looseVacation = looseAnswer === 'SI';
+    if (fields.looseVacation && fields.type !== 'VA') fallo('DATOS', 'La contabilización como días sueltos solo se aplica a vacaciones (VA).');
     if (!segments.length) fallo('DATOS', 'Faltan los tramos con ejercicio, inicio y fin.');
     fields.segments = segments.map((s, i) => {
       if (s.exercise && !/^\d{4}$/.test(s.exercise)) fallo('DATOS', `El ejercicio de cargo del tramo ${i + 1} necesita cuatro cifras.`);
@@ -179,7 +183,10 @@
     candidate.coverageStart = candidate.start;
     candidate.coverageEnd = candidate.end;
     candidate.singleVacation = candidate.type === 'VA' && candidate.start === candidate.end;
-    if (candidate.type === 'VA' && !candidate.singleVacation) {
+    const calendarDays = dia(candidate.end) - dia(candidate.start) + 1;
+    if (fields.looseVacation === true && calendarDays > 5) fallo('VA_SUELTAS', 'La contabilización como días sueltos solo permite solicitudes de hasta cinco días consecutivos.');
+    candidate.looseVacation = candidate.type === 'VA' && (candidate.singleVacation || fields.looseVacation === true);
+    if (candidate.type === 'VA' && !candidate.looseVacation) {
       comprobarCalendario(candidate.start, candidate.end, state.config);
       if (!habil(candidate.start, state.config) || !habil(candidate.end, state.config)) fallo('HABILES', 'Las VA de varios días deben comenzar y terminar en día hábil.');
       let next = sumarDias(candidate.end, 1);
@@ -192,7 +199,7 @@
       const last = segments[segments.length - 1], expiry = state.config.caducidades[last.exercise];
       if (expiry && candidate.coverageEnd > expiry) fallo('CADUCIDAD', `La cobertura añadida supera la caducidad del ejercicio ${last.exercise} (${formato(expiry)}).`);
     }
-    candidate.charges = segments.map(s => ({ exercise: s.exercise, dates: fechas(s.start, s.end).filter(date => candidate.type === 'AP' || candidate.singleVacation || habil(date, state.config)) }));
+    candidate.charges = segments.map(s => ({ exercise: s.exercise, dates: fechas(s.start, s.end).filter(date => candidate.type === 'AP' || candidate.looseVacation || habil(date, state.config)) }));
     return candidate;
   }
   const cruza = (aStart, aEnd, bStart, bEnd) => aStart <= bEnd && aEnd >= bStart;
@@ -202,10 +209,10 @@
     const cutoff = state.config.inicioContadores;
     if (permit.end < cutoff) return [];
     if (permit.charges) return permit.charges;
-    const single = permit.type === 'VA' && permit.start === permit.end;
+    const loose = permit.type === 'VA' && (permit.looseVacation === true || permit.start === permit.end);
     const segments = permit.segments || [];
-    if (permit.type === 'VA' && !single) comprobarCalendario(permit.start < cutoff ? cutoff : permit.start, permit.end, state.config);
-    return segments.map(s => ({ exercise: s.exercise, dates: s.end < cutoff ? [] : fechas(s.start < cutoff ? cutoff : s.start, s.end).filter(date => permit.type === 'AP' || single || habil(date, state.config)) }));
+    if (permit.type === 'VA' && !loose) comprobarCalendario(permit.start < cutoff ? cutoff : permit.start, permit.end, state.config);
+    return segments.map(s => ({ exercise: s.exercise, dates: s.end < cutoff ? [] : fechas(s.start < cutoff ? cutoff : s.start, s.end).filter(date => permit.type === 'AP' || loose || habil(date, state.config)) }));
   }
   function contadores(state) {
     const rows = new Map();
@@ -217,7 +224,7 @@
         if (!rows.has(key)) rows.set(key, { personId: permit.personId, exercise: charge.exercise, AP: 0, VA: 0, sueltas: 0 });
         const row = rows.get(key);
         row[permit.type] += days;
-        if (permit.type === 'VA' && permit.start === permit.end) row.sueltas += days;
+        if (permit.type === 'VA' && (permit.looseVacation === true || permit.start === permit.end)) row.sueltas += days;
       }
     }
     return [...rows.values()].sort((a, b) => a.personId.localeCompare(b.personId) || a.exercise - b.exercise);
@@ -226,10 +233,13 @@
     const other = state.permits.filter(p => !original || p.id !== original.id);
     const overlaps = other.filter(p => p.personId === candidate.personId && cruza(candidate.coverageStart, candidate.coverageEnd, p.coverageStart, p.coverageEnd));
     if (overlaps.length) return { kind: 'rejected', code: 'SOLAPAMIENTO', reason: 'Existe un permiso o situación administrativa de esta persona que se solapa con la cobertura solicitada.', details: overlaps.map(p => `${p.type}: ${formato(p.coverageStart)}–${formato(p.coverageEnd)}`) };
-    if (candidate.singleVacation) {
-      const exercise = candidate.segments[0].exercise;
-      const count = other.filter(p => p.personId === candidate.personId && p.type === 'VA' && p.start === p.end && p.segments?.some(s => s.exercise === exercise)).length;
-      if (exercise >= 2027 && count >= 5) return { kind: 'rejected', code: 'VA_SUELTAS', reason: `Ya tiene ${count} VA sueltas concedidas con cargo a ${exercise}. El máximo es 5; no pasa a espera.`, details: [] };
+    if (candidate.looseVacation) {
+      for (const charge of candidate.charges || []) {
+        if (charge.exercise < 2027) continue;
+        const count = other.filter(p => p.personId === candidate.personId && p.type === 'VA' && (p.looseVacation === true || p.start === p.end))
+          .flatMap(p => cargos(p, state)).filter(c => c.exercise === charge.exercise).reduce((total, c) => total + c.dates.length, 0);
+        if (count + charge.dates.length > 5) return { kind: 'rejected', code: 'VA_SUELTAS', reason: `Esta petición supera el máximo de 5 VA sueltas con cargo a ${charge.exercise}: ya tiene ${count} concedidas y solicita ${charge.dates.length}. No pasa a espera.`, details: [] };
+      }
     }
     const person = state.people.find(p => p.id === candidate.personId);
     const reasons = new Set(), details = [];
@@ -250,7 +260,7 @@
   }
   function preview(candidate) {
     if (!candidate || !candidate.start) return null;
-    return { type: candidate.type, start: candidate.start, end: candidate.end, coverageStart: candidate.coverageStart, coverageEnd: candidate.coverageEnd, charges: (candidate.charges || []).map(c => ({ exercise: c.exercise, days: c.dates.length })), singleVacation: candidate.singleVacation };
+    return { type: candidate.type, start: candidate.start, end: candidate.end, coverageStart: candidate.coverageStart, coverageEnd: candidate.coverageEnd, charges: (candidate.charges || []).map(c => ({ exercise: c.exercise, days: c.dates.length })), singleVacation: candidate.singleVacation, looseVacation: candidate.looseVacation === true };
   }
   function mensajeRespuesta(event) {
     const labels = { granted: 'CONCEDIDA', modified: 'MODIFICACIÓN CONCEDIDA', waiting: 'EN LISTA DE ESPERA', rejected: 'RECHAZADA', incomplete: 'DATOS POR CORREGIR', cancelled: 'CANCELADA', expired: 'CADUCADA' };
@@ -258,6 +268,7 @@
     if (event.preview) {
       const p = event.preview;
       lines.push(`Permiso: ${p.type} · ${formato(p.start)} al ${formato(p.end)}`, `Cobertura: ${formato(p.coverageStart)} al ${formato(p.coverageEnd)}`);
+      if (p.looseVacation) lines.push('Contabilización: días sueltos de VA (equivalente a AP; cuenta en el límite anual de 5).');
       lines.push(...p.charges.map(c => `Ejercicio ${c.exercise}: ${c.days} día(s) de ${p.type}.`));
     }
     if (event.details?.length) lines.push('Detalle:', ...event.details);
@@ -399,6 +410,7 @@
   const m = typeof module !== 'undefined' && module.exports ? require('../prototipo-permisos/motor.js') : root.PermisosSim;
   function validar(meta, type) {
     if (!meta || meta.schema !== 1 || !['manual', 'email'].includes(meta.origin) || !Array.isArray(meta.segments) || meta.segments.length > 2 || typeof meta.exception !== 'boolean') throw new Error('Metadatos de permiso no válidos.');
+    if (Object.prototype.hasOwnProperty.call(meta, 'looseVacation') && typeof meta.looseVacation !== 'boolean') throw new Error('La modalidad de VA sueltas guardada no es válida.');
     for (const date of [meta.start, meta.end, meta.coverageStart, meta.coverageEnd]) m.dia(date);
     if (meta.start > meta.end || meta.coverageStart !== meta.start || meta.coverageEnd < meta.end) throw new Error('Fechas solicitadas y cobertura no coinciden.');
     if (meta.reference !== null && (typeof meta.reference !== 'string' || !/^G50-\d{5,}$/.test(meta.reference))) throw new Error('Referencia de permiso no válida.');
@@ -411,12 +423,16 @@
       }
       if (meta.segments[0].start !== meta.start || meta.segments.at(-1).end !== meta.end) throw new Error('Los tramos deben cubrir todo el permiso solicitado.');
     } else if (meta.segments.length || meta.coverageEnd !== meta.end) throw new Error('Esta situación administrativa no admite cargos ni extensión automática.');
-    if ((type !== 'VA' || meta.start === meta.end) && meta.coverageEnd !== meta.end) throw new Error('Solo una VA de varios días puede tener cobertura posterior.');
+    const looseVacation = type === 'VA' && (meta.looseVacation === true || meta.start === meta.end);
+    if (meta.looseVacation === true && type !== 'VA') throw new Error('Solo una VA puede llevar la modalidad de días sueltos.');
+    if (looseVacation && m.dia(meta.end) - m.dia(meta.start) + 1 > 5) throw new Error('Las VA sueltas no pueden superar cinco días consecutivos.');
+    if ((type !== 'VA' || looseVacation) && meta.coverageEnd !== meta.end) throw new Error('Solo una VA de varios días puede ampliar su cobertura al fin de semana posterior.');
     return meta;
   }
   function crear(candidate, options) {
     if (!candidate || typeof candidate.personId !== 'string' || !candidate.personId || typeof candidate.type !== 'string' || !candidate.type) throw new Error('Falta integrante o tipo de permiso.');
     const meta = validar({ schema: 1, origin: options?.origin, reference: options?.reference || null, exception: options?.exception === true,
+      looseVacation: candidate.looseVacation === true || candidate.type === 'VA' && candidate.start === candidate.end,
       start: candidate.start, end: candidate.end, coverageStart: candidate.coverageStart || candidate.start, coverageEnd: candidate.coverageEnd || candidate.end,
       segments: (candidate.segments || []).map(s => ({ exercise: s.exercise, start: s.start, end: s.end })) }, candidate.type);
     return { policia_id: candidate.personId, tipo: candidate.type, fecha_inicio: meta.coverageStart, fecha_fin: meta.coverageEnd, g50: JSON.stringify(meta) };
@@ -429,7 +445,8 @@
     // y el calendario común vigente, no cifras copiadas de un formulario.
     return { id: document.id, personId: document.policia_id, type: document.tipo, origin: meta.origin, reference: meta.reference,
       start: meta.start, end: meta.end, coverageStart: meta.coverageStart, coverageEnd: meta.coverageEnd,
-      segments: meta.segments, singleVacation: document.tipo === 'VA' && meta.start === meta.end, exception: meta.exception };
+      segments: meta.segments, singleVacation: document.tipo === 'VA' && meta.start === meta.end,
+      looseVacation: document.tipo === 'VA' && (meta.looseVacation === true || meta.start === meta.end), exception: meta.exception };
   }
   const api = { crear, leer };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
@@ -673,6 +690,7 @@ else root.PermisosAdaptadorG50 = api;
     if (p.g50 !== undefined) {
       const meta = f.leer(p);
       result.fecha_inicio = meta.start; result.fecha_fin = meta.end;
+      result.looseVacation = meta.looseVacation === true;
       result.ejercicio = meta.segments[0]?.exercise || '';
       if (meta.segments.length === 2) Object.assign(result, { repartir: true, ejercicio2: meta.segments[1].exercise, corte: meta.segments[1].start });
     } else if (p.fecha_fin?.slice(0, 4) <= '2026') result.ejercicio = Number(p.fecha_fin.slice(0, 4));
@@ -710,11 +728,14 @@ else root.PermisosAdaptadorG50 = api;
     let candidate;
     if (['AP', 'VA'].includes(form.tipo)) {
       const segments = tramos(form);
-      if (original && original.type === form.tipo && original.start === start && original.end === end) {
+      const looseVacation = form.tipo === 'VA' && (start === end || form.looseVacation === true && m.dia(end) - m.dia(start) + 1 <= 5);
+      if (original && original.type === form.tipo && original.start === start && original.end === end && looseVacation === (original.looseVacation === true || original.type === 'VA' && original.start === original.end)) {
         // Una reclasificación de cargo no cambia ni normaliza la cobertura de
         // una concesión previa, incluso si acababa en domingo.
-        candidate = { personId: form.policia_id, type: form.tipo, start, end, coverageStart: original.coverageStart, coverageEnd: original.coverageEnd, segments, singleVacation: form.tipo === 'VA' && start === end };
-      } else candidate = m.prepararManual({ type: form.tipo, segments }, form.policia_id, state, now);
+        candidate = { personId: form.policia_id, type: form.tipo, start, end, coverageStart: original.coverageStart, coverageEnd: original.coverageEnd, segments, singleVacation: form.tipo === 'VA' && start === end, looseVacation };
+      } else {
+        candidate = m.prepararManual({ type: form.tipo, segments, looseVacation }, form.policia_id, state, now);
+      }
       const person = state.people.find(p => p.id === candidate.personId);
       const result = person.so === 'EM' ? { kind: 'granted' } : m.evaluar(candidate, state, original);
       if (result.kind !== 'granted' && !force) {
