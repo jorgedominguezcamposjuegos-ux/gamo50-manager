@@ -203,6 +203,25 @@
     return candidate;
   }
   const cruza = (aStart, aEnd, bStart, bEnd) => aStart <= bEnd && aEnd >= bStart;
+  function validarLimitacion({ start, end, personIds, reason }) {
+    dia(start); dia(end);
+    if (end < start) throw new Error('El último día no puede ser anterior al primero.');
+    if (!Array.isArray(personIds) || !personIds.length || personIds.some(id => typeof id !== 'string' || !id.trim())) {
+      throw new Error('Selecciona al menos un integrante.');
+    }
+    if (typeof reason !== 'string' || !reason.trim() || reason.trim().length > 500) {
+      throw new Error('Escribe un motivo de entre 1 y 500 caracteres.');
+    }
+    return { start, end, personIds: [...new Set(personIds)], reason: reason.trim() };
+  }
+  function resultadoLimitacion(candidate, limits = []) {
+    if (!esCuota(candidate) || candidate.action === 'CANCELAR') return null;
+    const start = candidate.coverageStart || candidate.start, end = candidate.coverageEnd || candidate.end;
+    const reasons = limits.filter(limit => limit.personIds.includes(candidate.personId)
+      && cruza(start, end, limit.start, limit.end)).map(limit => limit.reason);
+    if (!reasons.length) return null;
+    return { kind: 'rejected', code: 'LIMITACION_MANUAL', reason: 'Motivo: ' + [...new Set(reasons)].join(' / '), details: [] };
+  }
   const esCuota = permit => ['AP', 'VA'].includes(permit.type);
   function cargos(permit, state) {
     if (!esCuota(permit)) return [];
@@ -352,7 +371,7 @@
         request.pending = null; request.status = original ? 'granted' : 'expired';
         notify({ ...base, status: 'expired', reason: `La espera caducó a las 00:00 del ${formato(expires)}, en horario de España peninsular.`, details: [] }); continue;
       }
-      const result = evaluar(c, state, original);
+      const result = resultadoLimitacion(c, state.limitaciones) || evaluar(c, state, original);
       if (result.kind === 'waiting' && today >= expires) {
         request.pending = null; request.status = original ? 'granted' : 'expired';
         notify({ ...base, status: 'expired', reason: 'No hay disponibilidad y ya se ha alcanzado el comienzo del periodo; no puede quedar en espera.', details: result.details });
@@ -361,7 +380,7 @@
         c.queued = true; request.status = original ? 'granted' : 'waiting';
       } else if (result.kind === 'rejected') {
         request.pending = null; request.status = original ? 'granted' : 'rejected';
-        notify({ ...base, status: 'rejected', reason: result.reason, details: result.details });
+        notify({ ...base, status: 'rejected', code: result.code, reason: result.reason, details: result.details });
       } else {
         const permit = { ...clone(c), id: original?.id || `permiso-${request.reference}`, reference: request.reference, origin: 'email' };
         delete permit.queued;
@@ -375,7 +394,7 @@
     const summary = { to: 'eomagamo50@gmail.com', at: now, counts: Object.fromEntries(['granted', 'modified', 'waiting', 'rejected', 'incomplete', 'cancelled', 'expired'].map(status => [status, events.filter(e => e.status === status).length])), waiting: state.requests.filter(r => r.pending?.queued).length, emails: events.length, skipped: skipped.length };
     return { state, events, skipped, counters: counts, summary };
   }
-  const api = { crearEstado, leerCorreo, preparar, prepararManual, evaluar, revisar, contadores, fechas, sumarDias, formato, dia, dosMeses, partesPeninsula, horaPeninsula, normalizar, preview };
+  const api = { validarLimitacion, resultadoLimitacion, crearEstado, leerCorreo, preparar, prepararManual, evaluar, revisar, contadores, fechas, sumarDias, formato, dia, dosMeses, partesPeninsula, horaPeninsula, normalizar, preview };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.PermisosSim = api;
 })(typeof globalThis === 'undefined' ? this : globalThis);

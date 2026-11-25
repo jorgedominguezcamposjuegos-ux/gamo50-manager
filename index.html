@@ -40,13 +40,16 @@
 
   <!-- Validation functions -->
   <script src="js/validation.js"></script>
-  <script src="js/permisos-compartidos.js?v=20261117-v3"></script>
+  <script src="js/permisos-compartidos.js?v=limites-locales"></script>
   <script src="js/jszip.min.js"></script>
   <script src="js/control-salida.js?v=20261017-numericos"></script>
 
   <script>
-    // Inicializar Firebase con compat SDK
-    try {
+    window.previsualizacionG50 = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname)
+      && new URLSearchParams(location.search).get('vista') === 'limitar-permisos';
+    if (window.previsualizacionG50) {
+      window.firebaseInitialized = false;
+    } else try {
       console.log('🔥 Iniciando Firebase con config:', firebaseConfig);
       firebase.initializeApp(firebaseConfig);
       const db = firebase.firestore();
@@ -337,8 +340,178 @@
       );
     }
 
+    const claveLimitesLocales = 'g50.limitar-permisos.local.v1';
+    const limiteVacio = () => ({ id: '', start: '', end: '', reason: '', personIds: [] });
+
+    function LimitarPermisos({ efectivos, etiquetaGamo, formatearFecha, remoto }) {
+      const [limites, setLimites] = React.useState(() => {
+        if (remoto) return remoto.limits;
+        if (!window.previsualizacionG50) return [];
+        try {
+          const saved = JSON.parse(localStorage.getItem(claveLimitesLocales) || '[]');
+          return Array.isArray(saved) ? saved : [];
+        } catch (_) {
+          return [];
+        }
+      });
+      const [form, setForm] = React.useState(limiteVacio);
+      const [feedback, setFeedback] = React.useState(null);
+      const [paraRetirar, setParaRetirar] = React.useState(null);
+
+      const [enviando, setEnviando] = React.useState(false);
+      if (!remoto && !window.previsualizacionG50) {
+        return <Paper className="glass-card" sx={{ p: 3 }}>
+          <Typography variant="h6" fontWeight="600">Limitar permisos de AP y VA</Typography>
+          <Typography variant="body2" sx={{ my: 1.5 }}>Elige las fechas, los integrantes y el motivo que recibirán por correo. La edición requiere la cuenta de gestión.</Typography>
+          <Button variant="contained" target="_blank" rel="noopener" href="https://script.google.com/macros/s/AKfycby8t46syJX9NXCs_FU2StHrHagazHLv4OQxNdMEhmVVFlp-aFyP8CANqx5DOvSfR9DG/exec?gestion=1&amp;limites=1">Abrir gestión de limitaciones</Button>
+          {['localhost', '127.0.0.1', '[::1]'].includes(location.hostname) &&
+            <Button href="?vista=limitar-permisos" sx={{ ml: 1 }}>Abrir la prueba</Button>}
+        </Paper>;
+      }
+
+      const grupos = new Map();
+      for (const persona of efectivos) {
+        const so = String(persona.so);
+        const eo = String(persona.equipo);
+        if (!grupos.has(so)) grupos.set(so, new Map());
+        const equipos = grupos.get(so);
+        if (!equipos.has(eo)) equipos.set(eo, []);
+        equipos.get(eo).push(persona);
+      }
+      const seleccion = new Set(form.personIds);
+      const cambiar = (key, value) => {
+        setForm(prev => ({ ...prev, [key]: value }));
+        setFeedback(null);
+      };
+      const seleccionar = personas => {
+        setForm(prev => ({ ...prev, personIds: [...new Set([...prev.personIds, ...personas.map(p => p.id)])] }));
+        setFeedback(null);
+      };
+      const alternarPersona = id => {
+        setForm(prev => ({
+          ...prev, personIds: prev.personIds.includes(id) ? prev.personIds.filter(item => item !== id) : [...prev.personIds, id]
+        }));
+        setFeedback(null);
+      };
+      const cancelarEdicion = () => { setForm(limiteVacio()); setFeedback(null); };
+      const persistir = nuevos => {
+        if (!remoto) localStorage.setItem(claveLimitesLocales, JSON.stringify(nuevos));
+        setLimites(nuevos);
+      };
+      const guardar = async event => {
+        event.preventDefault();
+        if (enviando) return;
+        setEnviando(true);
+        try {
+          const regla = window.PermisosSim.validarLimitacion({ ...form, end: form.end || form.start });
+          const item = remoto
+            ? await remoto.write({ ...regla, id: form.id, previousVersion: form.version || 0, action: 'guardar' })
+            : { ...regla, id: form.id || crypto.randomUUID() };
+          persistir(form.id ? limites.map(limit => limit.id === form.id ? item : limit) : [...limites, item]);
+          setForm(limiteVacio());
+          setFeedback({ severity: 'success', text: remoto ? 'Limitación guardada.' : 'Limitación guardada en este navegador.' });
+        } catch (error) {
+          setFeedback({ severity: 'error', text: error.message });
+        } finally { setEnviando(false); }
+      };
+      const retirar = async () => {
+        if (enviando || !paraRetirar) return;
+        setEnviando(true);
+        try {
+          if (remoto) await remoto.write({ id: paraRetirar.id, previousVersion: paraRetirar.version || 0, action: 'retirar' });
+          persistir(limites.filter(item => item.id !== paraRetirar.id));
+          if (form.id === paraRetirar.id) setForm(limiteVacio());
+          setFeedback({ severity: 'success', text: 'Limitación retirada.' });
+        } catch (error) {
+          setFeedback({ severity: 'error', text: error.message });
+        }
+        setParaRetirar(null);
+        setEnviando(false);
+      };
+      const correo = form.start && (form.end || form.start) >= form.start && form.reason.trim() && form.personIds.length
+        ? window.PermisosSim.resultadoLimitacion(
+          { type: 'AP', personId: form.personIds[0], start: form.start, end: form.end || form.start },
+          [{ ...form, end: form.end || form.start, reason: form.reason.trim() }]
+        ) : null;
+
+      return (
+        <>
+          {!remoto && <Alert severity="info" sx={{ mb: 2 }}>Prueba local. Los cambios se guardan en este navegador. Puedes ver el motivo que recibiría el solicitante.</Alert>}
+          <Paper className="glass-card" sx={{ p: { xs: 2, sm: 3 }, mb: 3 }}>
+            <Box component="form" onSubmit={guardar}>
+              <Typography variant="h6" fontWeight="600">{form.id ? 'Editar limitación' : 'Nueva limitación de AP y VA'}</Typography>
+              <Typography variant="body2" color="text.secondary" mb={2}>Si un permiso solicitado coincide con un día limitado, se rechaza la solicitud completa. Los permisos ya concedidos se conservan.</Typography>
+              <Grid container spacing={2}>
+                <Grid item xs={12} sm={6}><TextField fullWidth type="date" label="Primer día" id="limite-inicio"
+                  InputLabelProps={{ shrink: true }} required value={form.start} onInput={e => cambiar('start', e.target.value)} /></Grid>
+                <Grid item xs={12} sm={6}><TextField fullWidth type="date" label="Último día" id="limite-fin"
+                  InputLabelProps={{ shrink: true }} inputProps={{ min: form.start || undefined }} value={form.end}
+                  onInput={e => cambiar('end', e.target.value)} helperText="Déjalo vacío para limitar un solo día." /></Grid>
+                <Grid item xs={12}><TextField fullWidth required multiline minRows={2} label="Motivo para el correo" id="limite-motivo"
+                  inputProps={{ maxLength: 500 }} value={form.reason} onChange={e => cambiar('reason', e.target.value)}
+                  helperText="Escribe el texto tal como quieras que lo reciba el solicitante." /></Grid>
+              </Grid>
+              <Divider sx={{ my: 2 }} />
+              <Typography variant="subtitle1" fontWeight="600">Integrantes afectados</Typography>
+              <Box display="flex" flexWrap="wrap" gap={1} my={1.5}>
+                <Button type="button" variant="outlined" onClick={() => seleccionar(efectivos)}>Seleccionar al GO</Button>
+                {['51', '54', '57'].map(so => <Button type="button" key={so} variant="outlined"
+                  disabled={!grupos.has(so)} onClick={() => seleccionar([...grupos.get(so).values()].flat())}>Seleccionar al G{so}</Button>)}
+                <Button type="button" disabled={!seleccion.size} onClick={() => cambiar('personIds', [])}>Quitar selección</Button>
+              </Box>
+              <Typography variant="body2" aria-live="polite" mb={1}>{seleccion.size} de {efectivos.length} seleccionados</Typography>
+              <Grid container spacing={1.5}>
+                {[...grupos].map(([so, equipos]) => (
+                  <Grid item xs={12} sm={6} md={3} key={so}>
+                    <Box component="section" sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, p: 1.5, height: '100%' }}>
+                      <Typography variant="subtitle2" fontWeight="700">{so === 'EM' ? 'Equipo de Mando' : `SO ${so}`}</Typography>
+                      {[...equipos].map(([eo, personas]) => (
+                        <Box key={eo} mt={1}>
+                          <Typography variant="caption" color="text.secondary" fontWeight="600">{etiquetaGamo(eo)}</Typography>
+                          {personas.map(p => <Box key={p.id} component="label" sx={{ display: 'flex', alignItems: 'center', gap: 1, my: .5, fontSize: '.85rem', cursor: 'pointer' }}>
+                            <input type="checkbox" style={{ accentColor: '#1e3a8a', width: 16, height: 16, flexShrink: 0 }}
+                              checked={seleccion.has(p.id)} onChange={() => alternarPersona(p.id)} />
+                            {p.nombre}
+                          </Box>)}
+                        </Box>
+                      ))}
+                    </Box>
+                  </Grid>
+                ))}
+              </Grid>
+              {correo && <Alert severity="info" sx={{ mt: 2, whiteSpace: 'pre-wrap' }}><strong>Vista previa del correo</strong><br />{correo.reason}</Alert>}
+              <Box display="flex" gap={1} mt={2} flexWrap="wrap">
+                <Button variant="contained" type="submit" disabled={enviando}>{form.id ? 'Guardar cambios' : 'Guardar limitación'}</Button>
+                {form.id && <Button type="button" onClick={cancelarEdicion}>Cancelar edición</Button>}
+              </Box>
+              {feedback && <Alert severity={feedback.severity} sx={{ mt: 2 }}>{feedback.text}</Alert>}
+            </Box>
+          </Paper>
+          <Paper className="glass-card" sx={{ p: { xs: 2, sm: 3 } }}>
+            <Typography variant="h6" fontWeight="600">Limitaciones guardadas</Typography>
+            {limites.length === 0 && <Typography variant="body2" color="text.secondary" mt={1}>Todavía no hay limitaciones.</Typography>}
+            {[...limites].sort((a, b) => a.start.localeCompare(b.start)).map(item => {
+              const nombres = efectivos.filter(p => item.personIds.includes(p.id)).map(p => p.nombre);
+              return <Box key={item.id} sx={{ pt: 2, mt: 2, borderTop: '1px solid', borderColor: 'divider' }}>
+                <Typography variant="subtitle2" fontWeight="700">{formatearFecha(item.start)}{item.end !== item.start && ` al ${formatearFecha(item.end)}`} · {item.personIds.length} seleccionados</Typography>
+                <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{item.reason}</Typography>
+                <Box component="details" sx={{ mt: 1, fontSize: '.85rem' }}><summary>Ver integrantes</summary>{nombres.join(', ')}</Box>
+                <Button type="button" onClick={() => { setForm(item); setFeedback(null); document.getElementById('limite-inicio')?.focus(); }}>Editar</Button>
+                <Button type="button" color="error" onClick={() => setParaRetirar(item)}>Retirar</Button>
+              </Box>;
+            })}
+          </Paper>
+          <Dialog open={!!paraRetirar} onClose={() => setParaRetirar(null)}>
+            <DialogTitle>Retirar limitación</DialogTitle>
+            <DialogContent>¿Quieres retirar esta limitación de AP y VA?</DialogContent>
+            <DialogActions><Button onClick={() => setParaRetirar(null)}>Cancelar</Button><Button onClick={retirar} color="error" disabled={enviando}>Retirar</Button></DialogActions>
+          </Dialog>
+        </>
+      );
+    }
+
     function App() {
-      const [tabValue, setTabValue] = React.useState(() => new URLSearchParams(window.location.search).get('vista') === 'resumen-bloque' ? 3 : 0);
+      const [tabValue, setTabValue] = React.useState(() => ({ 'resumen-bloque': 3, 'limitar-permisos': 4 }[new URLSearchParams(location.search).get('vista')] ?? 0));
       const [data, setData] = React.useState(null);
       const [loading, setLoading] = React.useState(true);
       const [fechaConsultaInicio, setFechaConsultaInicio] = React.useState(new Date().toISOString().split('T')[0]);
@@ -387,19 +560,6 @@
       // Estado para anotaciones de Integrantes G50
       const [anotacionesG50, setAnotacionesG50] = React.useState('');
       const [guardandoAnotacionG50, setGuardandoAnotacionG50] = React.useState(false);
-
-      // Estado para Servicios Bloque
-      const [selectedBloqueServicios, setSelectedBloqueServicios] = React.useState(325);
-      const [serviciosBloque, setServiciosBloque] = React.useState({});
-      const [dialogServicio, setDialogServicio] = React.useState(false);
-      const [servicioFormData, setServicioFormData] = React.useState({
-        id: '',
-        fecha: '',
-        servicio: '',
-        hora_inicio: '',
-        hora_fin: '',
-        personal: 1
-      });
 
       // Generar bloques de 28 días
       const generarBloques = () => {
@@ -644,6 +804,10 @@
       };
 
       React.useEffect(() => {
+        if (window.previsualizacionG50) {
+          fetchData();
+          return;
+        }
         // Esperar a que Firebase esté inicializado
         const checkFirebase = () => {
           if (window.firebaseInitialized === true) {
@@ -691,6 +855,7 @@
         try {
           console.log('📥 Iniciando carga de datos desde Firebase...');
           const db = window.firebaseDB;
+          if (window.previsualizacionG50) throw new Error('Vista local');
           console.log('🔥 DB:', db);
           
           // Fetch efectivos
@@ -711,15 +876,6 @@
           console.log('✅ Comisiones snapshot:', comisionesSnapshot.size, 'documentos');
           const comisionesData = comisionesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-          // Fetch servicios de bloque para que estén disponibles en cualquier dispositivo
-          const serviciosSnapshot = await db.collection('servicios').get();
-          const serviciosFirebase = {};
-          serviciosSnapshot.docs.forEach(doc => {
-            const servicio = { id: doc.id, ...doc.data() };
-            if (!serviciosFirebase[servicio.fecha]) serviciosFirebase[servicio.fecha] = [];
-            serviciosFirebase[servicio.fecha].push(servicio);
-          });
-          
           // Cargar anotaciones de G50 (manejar caso donde colección no existe)
           try {
             const anotacionesG50Doc = await db.collection('config').doc('anotaciones_g50').get();
@@ -733,25 +889,6 @@
           console.log('✅ Datos cargados desde Firebase:', { efectivos: efectivos.length, permisos: permisos.length, comisiones: comisionesData.length });
           setData({ efectivos, permisos, comisiones_servicio: comisionesData });
           setComisiones(comisionesData);
-          
-          // Usar Firebase como fuente compartida; conservar localStorage como respaldo/migración
-          const serviciosGuardados = localStorage.getItem('serviciosBloque');
-          const serviciosLocales = serviciosGuardados ? JSON.parse(serviciosGuardados) : {};
-          if (serviciosSnapshot.empty && Object.keys(serviciosLocales).length > 0) {
-            setServiciosBloque(serviciosLocales);
-            const migracion = db.batch();
-            Object.entries(serviciosLocales).forEach(([fecha, servicios]) => {
-              servicios.forEach(servicio => {
-                const servicioMigrado = { ...servicio, fecha: servicio.fecha || fecha };
-                const ref = db.collection('servicios').doc(servicioMigrado.id);
-                migracion.set(ref, { ...servicioMigrado, migratedAt: firebase.firestore.FieldValue.serverTimestamp() });
-              });
-            });
-            await migracion.commit();
-            console.log('✅ Servicios locales migrados a Firebase');
-          } else {
-            setServiciosBloque(serviciosFirebase);
-          }
           
           setLoading(false);
           return { efectivos, permisos, comisiones_servicio: comisionesData };
@@ -780,13 +917,7 @@
             });
             setComisiones(localData.comisiones_servicio || []);
             
-            // Cargar servicios desde localStorage
-            const serviciosGuardados = localStorage.getItem('serviciosBloque');
-            if (serviciosGuardados) {
-              setServiciosBloque(JSON.parse(serviciosGuardados));
-            }
-            
-            setSnackbar({ open: true, message: 'Datos cargados del archivo local (Firebase no disponible)', severity: 'warning' });
+            if (!window.previsualizacionG50) setSnackbar({ open: true, message: 'Datos cargados del archivo local (Firebase no disponible)', severity: 'warning' });
             setLoading(false);
           } catch (localError) {
             console.error('❌ Error cargando datos del archivo local:', localError);
@@ -1400,112 +1531,6 @@
         XLSX.writeFile(wb, `Cuadrante_Comision_${selectedComObj.localidad.replace(/\s+/g, '_')}.xlsx`);
       };
 
-      // Funciones para Servicios Bloque
-      const coloresServicios = ['#dbeafe', '#dcfce7', '#fef3c7', '#fce7f3', '#ede9fe', '#cffafe'];
-      const obtenerNivelServicio = (personal) => {
-        const cantidad = Number(personal) || 0;
-        if (cantidad <= 7) return { codigo: 'EO', nombre: 'Equipo operativo' };
-        if (cantidad <= 15) return { codigo: 'SO', nombre: 'Subgrupo operativo' };
-        if (cantidad <= 30) return { codigo: '2SOs', nombre: '2 Subgrupos operativos' };
-        return { codigo: 'GO', nombre: 'Grupo operativo' };
-      };
-
-      const abrirNuevoServicio = (fecha) => {
-        setServicioFormData({ id: '', fecha, servicio: '', hora_inicio: '', hora_fin: '', personal: 1 });
-        setDialogServicio(true);
-      };
-
-      const editarServicio = (fecha, servicio) => {
-        setServicioFormData({
-          id: servicio.id,
-          fecha,
-          servicio: servicio.servicio || '',
-          hora_inicio: servicio.hora_inicio || '',
-          hora_fin: servicio.hora_fin || '',
-          personal: Number(servicio.personal) || 1
-        });
-        setDialogServicio(true);
-      };
-
-      const handleGuardarServicio = () => {
-        if (!servicioFormData.servicio || !servicioFormData.hora_inicio) {
-          alert('Por favor, completa el servicio y la hora de inicio');
-          return;
-        }
-
-        const nuevoServicio = {
-          id: servicioFormData.id || `servicio_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-          fecha: servicioFormData.fecha,
-          servicio: servicioFormData.servicio,
-          hora_inicio: servicioFormData.hora_inicio,
-          hora_fin: servicioFormData.hora_fin,
-          personal: servicioFormData.personal
-        };
-
-        const fecha = servicioFormData.fecha;
-        const serviciosActuales = serviciosBloque[fecha] || [];
-        
-        if (servicioFormData.id) {
-          // Editar servicio existente
-          const serviciosActualizados = serviciosActuales.map(s => 
-            s.id === servicioFormData.id ? nuevoServicio : s
-          );
-          setServiciosBloque(prev => ({
-            ...prev,
-            [fecha]: serviciosActualizados
-          }));
-        } else {
-          // Añadir nuevo servicio
-          setServiciosBloque(prev => ({
-            ...prev,
-            [fecha]: [...serviciosActuales, nuevoServicio]
-          }));
-        }
-
-        if (window.firebaseDB) {
-          window.firebaseDB.collection('servicios').doc(nuevoServicio.id).set({
-            ...nuevoServicio,
-            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-          }).catch(error => console.error('Error guardando servicio en Firebase:', error));
-        }
-
-        // Guardar en localStorage
-        const serviciosPersistidos = {
-          ...serviciosBloque,
-          [fecha]: servicioFormData.id
-            ? serviciosActuales.map(s => s.id === servicioFormData.id ? nuevoServicio : s)
-            : [...serviciosActuales, nuevoServicio]
-        };
-        localStorage.setItem('serviciosBloque', JSON.stringify(serviciosPersistidos));
-
-        setDialogServicio(false);
-      };
-
-      const handleEliminarServicio = (servicioId) => {
-        if (!window.confirm('¿Seguro que deseas eliminar este servicio?')) return;
-        
-        const fecha = servicioFormData.fecha;
-        const serviciosFiltrados = (serviciosBloque[fecha] || []).filter(s => s.id !== servicioId);
-        
-        setServiciosBloque(prev => ({
-          ...prev,
-          [fecha]: serviciosFiltrados
-        }));
-
-        // Actualizar localStorage
-        localStorage.setItem('serviciosBloque', JSON.stringify({
-          ...serviciosBloque,
-          [fecha]: serviciosFiltrados
-        }));
-
-        if (window.firebaseDB) {
-          window.firebaseDB.collection('servicios').doc(servicioId).delete()
-            .catch(error => console.error('Error eliminando servicio de Firebase:', error));
-        }
-
-        setDialogServicio(false);
-      };
-
       const renderCalendar = () => {
         if (!consultaAgenteId || !consultaMes) return null;
         
@@ -1606,7 +1631,7 @@
                 <Tab label="Gestión en Comisión de Servicio" className="custom-tab" />
                 <Tab label="Consulta Individual" className="custom-tab" />
                 <Tab label="Resumen Bloque" className="custom-tab" />
-                <Tab label="Servicios Bloque" className="custom-tab" />
+                <Tab label="Limitar permisos" className="custom-tab" />
                 <Tab label="Integrantes G50" className="custom-tab" />
               </Tabs>
             </Paper>
@@ -2033,178 +2058,9 @@
               />
             </TabPanel>
 
-            {/* TAB 4: SERVICIOS BLOQUE */}
             <TabPanel value={tabValue} index={4}>
-              {(() => {
-                const bloqueSeleccionadoServicios = bloques.find(b => b.numero === selectedBloqueServicios) || bloques[0];
-                const diasBloqueServicios = obtenerDiasBloque(bloqueSeleccionadoServicios);
-                
-                return (
-                  <>
-                    <Paper className="glass-card" sx={{ p: 3, mb: 3 }}>
-                      <Box display="flex" justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={2}>
-                        <Typography variant="h6" fontWeight="600">Servicios Bloque de 28 Días</Typography>
-                        <Box display="flex" gap={2} alignItems="center">
-                          <FormControl size="small" sx={{ minWidth: 250 }}>
-                            <InputLabel>Seleccionar Bloque</InputLabel>
-                            <Select value={selectedBloqueServicios} label="Seleccionar Bloque" onChange={(e) => setSelectedBloqueServicios(Number(e.target.value))}>
-                              {bloques.map(b => <MenuItem key={b.numero} value={b.numero}>{b.label}</MenuItem>)}
-                            </Select>
-                          </FormControl>
-                        </Box>
-                      </Box>
-                      <Typography variant="body2" color="text.secondary" mt={1}>
-                        Periodo: {formatearFecha(bloqueSeleccionadoServicios.inicio)} al {formatearFecha(bloqueSeleccionadoServicios.fin)}
-                      </Typography>
-                    </Paper>
-
-                    <Paper className="glass-card" sx={{ p: 2 }}>
-                      <Typography variant="subtitle1" fontWeight="600" mb={2}>
-                        {(() => {
-                          const fechaInicio = new Date(bloqueSeleccionadoServicios.inicio);
-                          const fechaFin = new Date(bloqueSeleccionadoServicios.fin);
-                          const mesInicio = fechaInicio.toLocaleString('es-ES', { month: 'long' }).charAt(0).toUpperCase() + fechaInicio.toLocaleString('es-ES', { month: 'long' }).slice(1);
-                          const mesFin = fechaFin.toLocaleString('es-ES', { month: 'long' }).charAt(0).toUpperCase() + fechaFin.toLocaleString('es-ES', { month: 'long' }).slice(1);
-                          const meses = mesInicio === mesFin ? mesInicio : `${mesInicio}-${mesFin}`;
-                          return `${meses} en el bloque ${selectedBloqueServicios}`;
-                        })()}
-                      </Typography>
-                      
-                      <Box sx={{ overflowX: 'auto' }}>
-                        <Grid container spacing={1}>
-                          {['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'].map(dia => (
-                            <Grid item xs={12/7} key={dia}>
-                              <Box textAlign="center" fontWeight="bold" py={1}>{dia}</Box>
-                            </Grid>
-                          ))}
-                          {diasBloqueServicios.map((dia, index) => {
-                            const serviciosDia = serviciosBloque[dia.fecha] || [];
-                            const diaNum = dia.diaMes;
-                            const nombreDia = ['DOMINGO', 'LUNES', 'MARTES', 'MIÉRCOLES', 'JUEVES', 'VIERNES', 'SÁBADO'][dia.diaSemana];
-                            return (
-                              <Grid item xs={12/7} key={dia.fecha}>
-                                <Box 
-                                  onClick={() => abrirNuevoServicio(dia.fecha)}
-                                  sx={{
-                                    minHeight: 120,
-                                    maxHeight: 230,
-                                    overflowY: 'auto',
-                                    border: '1px solid #e2e8f0', 
-                                    borderRadius: 1, 
-                                    p: 1,
-                                    cursor: 'pointer',
-                                    backgroundColor: serviciosDia.length > 0 ? '#e0f2fe' : '#fff',
-                                    '&:hover': { backgroundColor: serviciosDia.length > 0 ? '#bae6fd' : '#f8fafc' }
-                                  }}
-                                >
-                                  <Typography variant="caption" fontWeight="bold" sx={{ display: 'block' }}>{nombreDia}</Typography>
-                                  <Typography variant="body2" fontWeight="bold">{diaNum}</Typography>
-                                  <Typography variant="caption" sx={{ display: 'block', mt: 0.5, fontSize: 10 }}>
-                                    {formatearFecha(dia.fecha)}
-                                  </Typography>
-                                  {serviciosDia.length > 0 && (
-                                    <Box sx={{ mt: 1 }}>
-                                      {serviciosDia.map((servicio, idx) => (
-                                        <Box key={servicio.id} sx={{
-                                          backgroundColor: coloresServicios[idx % coloresServicios.length],
-                                          borderRadius: 1,
-                                          borderLeft: '4px solid #1e3a8a',
-                                          px: 0.75,
-                                          py: 0.5,
-                                          mb: idx < serviciosDia.length - 1 ? 0.5 : 0,
-                                          pb: idx < serviciosDia.length - 1 ? 0.5 : 0,
-                                          borderBottom: idx < serviciosDia.length - 1 ? '1px dashed #ccc' : 'none'
-                                        }} onClick={(e) => { e.stopPropagation(); editarServicio(dia.fecha, servicio); }}>
-                                          <Typography variant="caption" sx={{ fontWeight: 'bold', fontSize: 9, display: 'block' }}>
-                                            {servicio.servicio}
-                                          </Typography>
-                                          <Typography variant="caption" sx={{ fontSize: 8, display: 'block' }}>
-                                            {servicio.hora_inicio}{servicio.hora_fin ? ` - ${servicio.hora_fin}` : ''}
-                                          </Typography>
-                                          <Typography variant="caption" sx={{ fontSize: 8, display: 'block', color: '#334155' }}>
-                                            {servicio.personal} componentes ({obtenerNivelServicio(servicio.personal).codigo} · {obtenerNivelServicio(servicio.personal).nombre})
-                                          </Typography>
-                                        </Box>
-                                      ))}
-                                    </Box>
-                                  )}
-                                </Box>
-                              </Grid>
-                            );
-                          })}
-                        </Grid>
-                      </Box>
-                    </Paper>
-
-                    {/* Modal para Servicios */}
-                    <Dialog open={dialogServicio} onClose={() => setDialogServicio(false)} maxWidth="sm" fullWidth>
-                      <DialogTitle>
-                        {servicioFormData.id ? 'Editar servicio' : 'Añadir servicio'} — {formatearFecha(servicioFormData.fecha)}
-                      </DialogTitle>
-                      <DialogContent>
-                        <TextField
-                          autoFocus
-                          margin="dense"
-                          label="Servicio"
-                          fullWidth
-                          variant="outlined"
-                          value={servicioFormData.servicio}
-                          onChange={(e) => setServicioFormData({...servicioFormData, servicio: e.target.value})}
-                          required
-                          sx={{ mt: 2 }}
-                        />
-                        <TextField
-                          margin="dense"
-                          label="Hora Inicio"
-                          type="time"
-                          fullWidth
-                          variant="outlined"
-                          InputLabelProps={{ shrink: true }}
-                          value={servicioFormData.hora_inicio}
-                          onChange={(e) => setServicioFormData({...servicioFormData, hora_inicio: e.target.value})}
-                          required
-                        />
-                        <TextField
-                          margin="dense"
-                          label="Hora Fin (opcional)"
-                          type="time"
-                          fullWidth
-                          variant="outlined"
-                          InputLabelProps={{ shrink: true }}
-                          value={servicioFormData.hora_fin}
-                          onChange={(e) => setServicioFormData({...servicioFormData, hora_fin: e.target.value})}
-                        />
-                        <FormControl fullWidth margin="dense">
-                          <InputLabel>Personal</InputLabel>
-                          <Select
-                            value={servicioFormData.personal}
-                            label="Personal"
-                            onChange={(e) => setServicioFormData({...servicioFormData, personal: parseInt(e.target.value)})}
-                          >
-                            {Array.from({length: 40}, (_, i) => i + 1).map(num => (
-                              <MenuItem key={num} value={num}>{num}</MenuItem>
-                            ))}
-                          </Select>
-                        </FormControl>
-                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
-                          {obtenerNivelServicio(servicioFormData.personal).codigo}: {obtenerNivelServicio(servicioFormData.personal).nombre} ({servicioFormData.personal} componentes)
-                        </Typography>
-                      </DialogContent>
-                      <DialogActions>
-                        {servicioFormData.id && (
-                          <Button onClick={() => handleEliminarServicio(servicioFormData.id)} color="error">
-                            Eliminar
-                          </Button>
-                        )}
-                        <Button onClick={() => setDialogServicio(false)}>Cancelar</Button>
-                        <Button onClick={handleGuardarServicio} variant="contained" color="primary">
-                          Guardar
-                        </Button>
-                      </DialogActions>
-                    </Dialog>
-                  </>
-                );
-              })()}
+              <LimitarPermisos efectivos={[...data.efectivos].sort(compararOrdenOperativo)}
+                etiquetaGamo={etiquetaGamo} formatearFecha={formatearFecha} />
             </TabPanel>
             {/* TAB 5: INTEGRANTES G50 */}
             <TabPanel value={tabValue} index={5}>
